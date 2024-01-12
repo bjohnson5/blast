@@ -23,6 +23,8 @@
 To read more about the ideas behind BLAST and see some initial testing results using LDK, check out this proof-of-concept project: https://github.com/bjohnson5/ln-ms-framework
 
 # Roadmap
+BLAST development will all take place in this repository and will be broken down into 3 Phases. The first two phases will be reasearch efforts and the findings will be published to this repository.
+
 ![alt text](https://github.com/bjohnson5/blast/blob/main/images/roadmap.png?raw=true)
 
 # Build
