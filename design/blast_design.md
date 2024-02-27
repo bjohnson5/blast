@@ -3,7 +3,7 @@
 ---
 title: BLAST
 ---
-flowchart TD
+flowchart LR
     core(blast_core)
     web(blast_web)
     model(blast_models)
