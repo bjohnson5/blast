@@ -184,7 +184,7 @@ require (
 
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display
 
-replace github.com/lightningnetwork/lnd => github.com/bjohnson5/lnd v0.0.0-20240327135650-1034f2e1c44d
+replace github.com/lightningnetwork/lnd => github.com/bjohnson5/lnd v0.0.0-20240327151243-4d6154c43c64
 
 replace github.com/btcsuite/btcwallet => github.com/bjohnson5/btcwallet v0.0.0-20240327140137-63d1e6d86767
 

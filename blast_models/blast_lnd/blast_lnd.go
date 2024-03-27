@@ -53,12 +53,12 @@ func main() {
 
 		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Could not get executable directory")
 		}
-		fmt.Println(dir)
 
-		lnddir := dir + "/lnd" + strconv.Itoa(i) + "/"
-		write_config(strconv.Itoa(i), dir, lnddir)
+		blast_data_dir := dir + "/blast_data"
+		lnddir := blast_data_dir + "/lnd" + strconv.Itoa(i) + "/"
+		write_config(strconv.Itoa(i), blast_data_dir, lnddir)
 		// Load the configuration, and parse any command line options. This
 		// function will also set up logging properly.
 		lnd.DefaultLndDir = lnddir
