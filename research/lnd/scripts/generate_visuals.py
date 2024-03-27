@@ -24,16 +24,16 @@ def create_pie_chart(df, filename):
     names = grouped_data['Name']
     flat_percentages = grouped_data['Flat%']
     
-    plt.style.use('dark_background')
-    dark_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-    
+    plt.style.use('theme.mplstyle')
+    dark_palette = ['#004c6d', '#136383', '#267c9a', '#3895af', '#4cafc4', '#62c9d9', '#79e4ec', '#93ffff']
+
     # Create pie chart
     plt.figure(figsize=(20, 8))
     plt.pie(flat_percentages, colors=dark_palette, labels=names, autopct='%1.1f%%', startangle=140)
     plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
     
     # Extract test case number from the filename
-    test_case_number = filename.split('_')[-1].split('\\')[0]
+    test_case_number = filename.split('_')[-1].split('/')[0]
 
     # Add title to the pie chart
     plt.title(f"Function Memory Usage: Test Case {test_case_number}", loc='left', pad=20, fontsize=16, fontweight='bold')
