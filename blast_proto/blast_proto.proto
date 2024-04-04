@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package blast_proto;
+option go_package = "./blast_proto";
+
+service Example {
+    rpc SayHello (HelloRequest) returns (HelloResponse) {}
+}
+
+message HelloRequest {
+    string name = 1;
+}
+
+message HelloResponse {
+    string greeting = 1;
+}

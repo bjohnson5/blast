@@ -1,22 +1,32 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"os"
+	s "os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/lightningnetwork/lnd"
 	"github.com/lightningnetwork/lnd/signal"
+	"google.golang.org/grpc"
+
+	pb "blast_lnd/blast_proto" // Import your generated proto file
 )
 
-const configfile string = `listen=9%[1]s
-rpclisten=localhost:10%[1]s
-restlisten=localhost:8%[1]s
+const configfile string = `listen=3%[1]s
+rpclisten=localhost:4%[1]s
+restlisten=localhost:5%[1]s
 datadir=%[2]s/lnd%[1]s/data
 logdir=%[2]s/lnd%[1]s/log
 tlscertpath=%[2]s/lnd%[1]s/tls.cert
@@ -34,6 +44,17 @@ bitcoin.regtest=1
 [neutrino]
 neutrino.connect=localhost:18444`
 
+type SimLnNode struct {
+	Id       string `json:"id"`
+	Address  string `json:"address"`
+	Macaroon string `json:"macaroon"`
+	Cert     string `json:"cert"`
+}
+
+type SimJsonFile struct {
+	Nodes []SimLnNode `json:"nodes"`
+}
+
 func main() {
 	go func() {
 		http.ListenAndServe("localhost:6060", nil)
@@ -41,41 +62,60 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Hook interceptor for os signals.
+	// Handle OS signals for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signalsToCatch := []os.Signal{
+		os.Interrupt,
+		os.Kill,
+		syscall.SIGTERM,
+		syscall.SIGQUIT,
+		syscall.SIGKILL,
+		syscall.SIGINT,
+	}
+	s.Notify(sigCh, signalsToCatch...)
+
 	shutdownInterceptor, err := signal.Intercept()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		fmt.Println("Could not set up shutdown interceptor.")
 		os.Exit(1)
 	}
 
-	for i := 0; i < 100; i++ {
-		fmt.Printf("Iteration %d\n", i)
+	num_nodes, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		fmt.Println("Invalid number of nodes.")
+		os.Exit(1)
+	}
 
-		dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-		if err != nil {
-			fmt.Println("Could not get executable directory")
-		}
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		fmt.Println("Could not get executable directory.")
+		os.Exit(1)
+	}
 
-		blast_data_dir := dir + "/blast_data"
-		lnddir := blast_data_dir + "/lnd" + strconv.Itoa(i) + "/"
-		write_config(strconv.Itoa(i), blast_data_dir, lnddir)
-		// Load the configuration, and parse any command line options. This
-		// function will also set up logging properly.
+	blast_data_dir := dir + "/blast_data"
+	node_list := SimJsonFile{Nodes: []SimLnNode{}}
+
+	for i := 0; i < num_nodes; i++ {
+		node_id := pad_with_zeros(i, 4)
+		fmt.Println("Creating node: " + node_id)
+
+		lnddir := blast_data_dir + "/lnd" + node_id + "/"
+		write_config(node_id, blast_data_dir, lnddir)
 		lnd.DefaultLndDir = lnddir
 		lnd.DefaultConfigFile = lnddir + "lnd.conf"
 		loadedConfig, err := lnd.LoadConfig(shutdownInterceptor)
 		if err != nil {
 			if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
-				// Print error if not due to help request.
-				err = fmt.Errorf("failed to load config: %w", err)
-				_, _ = fmt.Fprintln(os.Stderr, err)
+				fmt.Println("Error loading config.")
 				os.Exit(1)
 			}
-
-			// Help was requested, exit normally.
 			os.Exit(0)
 		}
 		implCfg := loadedConfig.ImplementationConfig(shutdownInterceptor)
+
+		n := SimLnNode{Id: "blast-" + node_id, Address: "localhost:4" + node_id, Macaroon: "", Cert: blast_data_dir + "/lnd" + node_id + "/tls.cert"}
+		node_list.Nodes = append(node_list.Nodes, n)
+
 		wg.Add(1)
 		go start_lnd(loadedConfig, implCfg, shutdownInterceptor, &wg)
 
@@ -85,7 +125,54 @@ func main() {
 		}
 	}
 
+	create_sim_ln_file(node_list, blast_data_dir+"/sim.json")
+
+	server := start_grpc_server(&wg)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Wait for OS signal
+		<-sigCh
+		log.Println("Received shutdown signal")
+		server.GracefulStop()
+	}()
+
 	wg.Wait()
+}
+
+func pad_with_zeros(num int, width int) string {
+	numStr := strconv.Itoa(num)
+	numLen := len(numStr)
+	if numLen >= width {
+		return numStr
+	}
+	padding := width - numLen
+	paddedStr := fmt.Sprintf("%s%s", strings.Repeat("0", padding), numStr)
+	return paddedStr
+}
+
+func create_sim_ln_file(obj interface{}, filename string) error {
+	// Marshal object to JSON
+	jsonData, err := json.MarshalIndent(obj, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	// Write JSON data to file
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(jsonData)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("JSON file '%s' created successfully.\n", filename)
+	return nil
 }
 
 func write_config(num string, currentdir string, dir string) {
@@ -94,7 +181,7 @@ func write_config(num string, currentdir string, dir string) {
 	conf := fmt.Sprintf(string(configfile), num, currentdir)
 
 	// Ensure the directory structure exists
-	err := ensureDirectoryExists(filePath)
+	err := ensure_directory_exists(filePath)
 	if err != nil {
 		fmt.Println("Error creating directories:", err)
 		return
@@ -118,10 +205,47 @@ func write_config(num string, currentdir string, dir string) {
 	fmt.Println("File created successfully at:", filePath)
 }
 
-// ensureDirectoryExists creates the directory structure for the given file path
-func ensureDirectoryExists(filePath string) error {
+func ensure_directory_exists(filePath string) error {
 	dir := filepath.Dir(filePath)
 	return os.MkdirAll(dir, os.ModePerm)
+}
+
+type ExampleServer struct {
+	pb.UnimplementedExampleServer
+}
+
+func (s *ExampleServer) SayHello(ctx context.Context, request *pb.HelloRequest) (*pb.HelloResponse, error) {
+	// Implement logic here
+	response := &pb.HelloResponse{
+		Greeting: "Hello, " + request.Name,
+	}
+	return response, nil
+}
+
+func start_grpc_server(wg *sync.WaitGroup) *grpc.Server {
+	// Create a new gRPC server
+	server := grpc.NewServer()
+
+	// Register your service with the server
+	pb.RegisterExampleServer(server, &ExampleServer{})
+
+	// Define the address and start the server
+	address := "localhost:50051"
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Printf("Server started at %s", address)
+		if err := server.Serve(listener); err != nil {
+			log.Fatalf("Failed to serve: %v", err)
+		}
+	}()
+
+	return server
 }
 
 func start_lnd(cfg *lnd.Config, implCfg *lnd.ImplementationCfg, interceptor signal.Interceptor, wg *sync.WaitGroup) {
