@@ -18,8 +18,10 @@ import (
 
 	"github.com/jessevdk/go-flags"
 	"github.com/lightningnetwork/lnd"
+	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/signal"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	pb "blast_lnd/blast_proto" // Import your generated proto file
 )
@@ -54,6 +56,8 @@ type SimLnNode struct {
 type SimJsonFile struct {
 	Nodes []SimLnNode `json:"nodes"`
 }
+
+var clients map[string]*grpc.ClientConn
 
 func main() {
 	go func() {
@@ -123,6 +127,26 @@ func main() {
 			fmt.Println("Sleeping for 10 seconds...")
 			time.Sleep(10 * time.Second)
 		}
+	}
+
+	clients = make(map[string]*grpc.ClientConn)
+	for _, n := range node_list.Nodes {
+		var tlsCreds credentials.TransportCredentials
+		tlsCreds, err = credentials.NewClientTLSFromFile(n.Cert, "")
+		if err != nil {
+			fmt.Println("error reading TLS cert: %w", err)
+		}
+
+		opts := []grpc.DialOption{
+			grpc.WithBlock(),
+			grpc.WithTransportCredentials(tlsCreds),
+		}
+		client, err := grpc.Dial(n.Address, opts...)
+		if err != nil {
+			fmt.Println("Error connecting to node: " + n.Id)
+		}
+
+		clients[n.Id] = client
 	}
 
 	create_sim_ln_file(node_list, blast_data_dir+"/sim.json")
@@ -210,14 +234,48 @@ func ensure_directory_exists(filePath string) error {
 	return os.MkdirAll(dir, os.ModePerm)
 }
 
-type ExampleServer struct {
-	pb.UnimplementedExampleServer
+type BlastRpcServer struct {
+	pb.UnimplementedBlastRpcServer
 }
 
-func (s *ExampleServer) SayHello(ctx context.Context, request *pb.HelloRequest) (*pb.HelloResponse, error) {
-	// Implement logic here
-	response := &pb.HelloResponse{
-		Greeting: "Hello, " + request.Name,
+func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
+	if con, ok := clients[request.Node]; ok {
+		client := lnrpc.NewLightningClient(con)
+		req := &lnrpc.ListPeersRequest{LatestError: true}
+		ctx := context.Background()
+		resp, err := client.ListPeers(ctx, req)
+		if err != nil {
+			fmt.Println("Error calling the node " + err.Error())
+		}
+		response := &pb.BlastRpcResponse{
+			Response: "Hello, " + resp.String(),
+		}
+		return response, nil
+	}
+
+	response := &pb.BlastRpcResponse{
+		Response: "Hello, " + "Blake",
+	}
+	return response, nil
+}
+
+func (s *BlastRpcServer) GetInfo(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
+	if con, ok := clients[request.Node]; ok {
+		client := lnrpc.NewLightningClient(con)
+		req := &lnrpc.GetInfoRequest{}
+		ctx := context.Background()
+		resp, err := client.GetInfo(ctx, req)
+		if err != nil {
+			fmt.Println("Error calling the node " + err.Error())
+		}
+		response := &pb.BlastRpcResponse{
+			Response: "Hello, " + resp.IdentityPubkey,
+		}
+		return response, nil
+	}
+
+	response := &pb.BlastRpcResponse{
+		Response: "Hello, " + "Blake",
 	}
 	return response, nil
 }
@@ -227,7 +285,7 @@ func start_grpc_server(wg *sync.WaitGroup) *grpc.Server {
 	server := grpc.NewServer()
 
 	// Register your service with the server
-	pb.RegisterExampleServer(server, &ExampleServer{})
+	pb.RegisterBlastRpcServer(server, &BlastRpcServer{})
 
 	// Define the address and start the server
 	address := "localhost:50051"

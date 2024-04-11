@@ -3,14 +3,23 @@ syntax = "proto3";
 package blast_proto;
 option go_package = "./blast_proto";
 
-service Example {
-    rpc SayHello (HelloRequest) returns (HelloResponse) {}
+service BlastRpc {
+    rpc WalletBalance (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc ChannelBalance (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc ListPeers (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc ListChannels (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc GetInfo (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc OpenChannel (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc CloseChannel (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc ConnectPeer (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc DisconnectPeer (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc GetSimLn (BlastRpcRequest) returns (BlastRpcResponse) {}
 }
 
-message HelloRequest {
-    string name = 1;
+message BlastRpcRequest {
+    string node = 1;
 }
 
-message HelloResponse {
-    string greeting = 1;
+message BlastRpcResponse {
+    string response = 1;
 }

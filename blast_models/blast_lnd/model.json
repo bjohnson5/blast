@@ -1,3 +1,5 @@
 {
-    "name": "blast_lnd"
+    "name": "blast_lnd",
+    "rpc": "localhost:50051",
+    "start": "blast_lnd"
 }

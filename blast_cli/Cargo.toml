@@ -5,9 +5,6 @@ edition = "2021"
 
 [dependencies]
 blast_core = { path = "../blast_core" }
-blast_model_interface = { path = "../blast_model_interface" }
-sim-lib = { git = "https://github.com/bjohnson5/sim-ln", branch = "main" }
 tokio = { version = "1.37.0", features = ["full"] }
 ctrlc = "3.3.0"
-bitcoin = { version = "0.30.1" }
 anyhow = { version = "1.0.69", features = ["backtrace"] }

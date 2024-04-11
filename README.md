@@ -29,10 +29,12 @@ BLAST development will all take place in this repository and will be broken down
 ![alt text](https://github.com/bjohnson5/blast/blob/main/images/roadmap.png?raw=true)
 
 # Repo Tour
+- `blast_cli` - The CLI for running blast
 - `blast_core`- The core simulation library
 - `blast_model_interface` - The interface between the node models and core library
 - `blast_models` - The node models
-- `blast_web` - The web application
+- `blast_proto` - The BLAST RPC protocol definition
+- `blast_web` - The web interface for running blast
 - `design` - Design documents
 - `images` - Graphics for the repository
 - `progress_reports` - 90 day status reports on the progress and future work

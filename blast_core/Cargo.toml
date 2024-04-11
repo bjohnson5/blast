@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+blast_model_interface = { path = "../blast_model_interface" }
+bitcoin = { version = "0.30.1" }
+sim-lib = { git = "https://github.com/bjohnson5/sim-ln", branch = "main" }
+tokio = { version = "1.37.0", features = ["full"] }
