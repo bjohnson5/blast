@@ -15,7 +15,7 @@ use tonic::transport::Channel;
 use serde::Deserialize;
 
 use blast_proto::blast_rpc_client::BlastRpcClient;
-use blast_proto::BlastRpcRequest;
+use crate::blast_proto::*;
 
 // Import the generated proto-rust file into a module
 pub mod blast_proto {
@@ -50,7 +50,7 @@ impl BlastModelInterface {
         blast_model_interface
     }
 
-    pub async fn create_nodes(&mut self, model: String, num_nodes: u64, running: Arc<AtomicBool>) -> Option<Child> {
+    pub async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Option<Child> {
         let model = match self.models.get_mut(&model) {
             Some(model) => {
                 model
@@ -73,7 +73,6 @@ impl BlastModelInterface {
         let model_dir = current_dir.to_string_lossy().into_owned();
 
         let child = Command::new(model_dir)
-            .arg(&num_nodes.to_string())
             .spawn()
             .expect("Failed to execute process");
 
@@ -102,6 +101,68 @@ impl BlastModelInterface {
         Some(child)
     }
 
+    pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), Box<dyn std::error::Error>> {
+        //start nodes
+        let model = match self.models.get_mut(&model) {
+            Some(model) => {
+                model
+            },
+            None => {
+                return Ok(());
+            }
+        };
+
+        let client = match &mut model.rpc_connection {
+            Some(c) => {
+                c
+            },
+            None => {
+                return Ok(());
+            }
+        };
+        let request = tonic::Request::new(BlastStartRequest {
+            num_nodes: num_nodes,
+        });
+        
+        let response = client.start_nodes(request).await?;
+        if response.get_ref().success {
+            let request = tonic::Request::new(BlastSimlnRequest {
+            });
+            
+            let response = client.get_sim_ln(request).await?;
+            println!("RESPONSE={:?}", response);
+        }
+        Ok(())
+    }
+
+    pub async fn get_pub_key(&mut self, node_id: String) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: look up the node_id and find which model it belongs too
+        let model = match self.models.get_mut(&String::from("blast_lnd")) {
+            Some(model) => {
+                model
+            },
+            None => {
+                return Ok(());
+            }
+        };
+
+        let client = match &mut model.rpc_connection {
+            Some(c) => {
+                c
+            },
+            None => {
+                return Ok(());
+            }
+        };
+        let request = tonic::Request::new(BlastPubKeyRequest {
+            node: node_id,
+        });
+        
+        let response = client.get_pub_key(request).await?;
+        println!("RESPONSE={:?}", response);
+        Ok(())
+    }
+
     pub async fn list_peers(&mut self, node_id: String) -> Result<(), Box<dyn std::error::Error>> {
         // TODO: look up the node_id and find which model it belongs too
         let model = match self.models.get_mut(&String::from("blast_lnd")) {
@@ -121,38 +182,10 @@ impl BlastModelInterface {
                 return Ok(());
             }
         };
-        let request = tonic::Request::new(BlastRpcRequest {
+        let request = tonic::Request::new(BlastPeersRequest {
             node: node_id,
         });
         let response = client.list_peers(request).await?;
-        println!("RESPONSE={:?}", response);
-        Ok(())
-    }
-
-    pub async fn get_info(&mut self, node_id: String) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: look up the node_id and find which model it belongs too
-        let model = match self.models.get_mut(&String::from("blast_lnd")) {
-            Some(model) => {
-                model
-            },
-            None => {
-                return Ok(());
-            }
-        };
-
-        let client = match &mut model.rpc_connection {
-            Some(c) => {
-                c
-            },
-            None => {
-                return Ok(());
-            }
-        };
-        let request = tonic::Request::new(BlastRpcRequest {
-            node: node_id,
-        });
-        
-        let response = client.get_info(request).await?;
         println!("RESPONSE={:?}", response);
         Ok(())
     }

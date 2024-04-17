@@ -28,9 +28,8 @@ impl Blast {
         blast
     }
 
-    pub fn run_simulation(&mut self) {
+    pub fn start_simulation(&mut self) {
         // TODO: need to get all the SimLn data from all nodes and compile it into one
-        // TODO: part of the BLAST RPC protocol will include a GetSimLN function that models will have to implement
         let clients: HashMap<PublicKey, Arc<Mutex<dyn LightningNode>>> = HashMap::new();
         let validated_activities: Vec<ActivityDefinition> = Vec::new();
         let sim = Simulation::new(
@@ -53,10 +52,24 @@ impl Blast {
             None => {}
         };
     }
-    
-    pub async fn create_nodes(&mut self, model: String, num_nodes: u64, running: Arc<AtomicBool>) -> Option<Child> {
-        let blast_lnd = self.blast_model_interface.create_nodes(model, num_nodes, running).await;
+
+    pub async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Option<Child> {
+        let blast_lnd = self.blast_model_interface.start_model(model, running).await;
         blast_lnd
+    }
+    
+    pub async fn start_nodes(&mut self, model: String, num_nodes: i32) {
+        let _ = self.blast_model_interface.start_nodes(model, num_nodes).await;
+    }
+
+    pub async fn get_pub_key(&mut self, node_id: String) {
+        match self.blast_model_interface.get_pub_key(node_id).await {
+            Ok(_) => {
+            },
+            Err(_) => {
+                println!("Error calling get_pub_key")
+            }
+        }
     }
 
     pub async fn list_peers(&mut self, node_id: String) {
@@ -65,16 +78,6 @@ impl Blast {
             },
             Err(_) => {
                 println!("Error calling list peers")
-            }
-        }
-    }
-
-    pub async fn get_info(&mut self, node_id: String) {
-        match self.blast_model_interface.get_info(node_id).await {
-            Ok(_) => {
-            },
-            Err(_) => {
-                println!("Error calling get_info")
             }
         }
     }

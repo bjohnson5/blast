@@ -4,16 +4,48 @@ package blast_proto;
 option go_package = "./blast_proto";
 
 service BlastRpc {
+    rpc StartNodes (BlastStartRequest) returns (BlastStartResponse) {}
+    rpc GetSimLn (BlastSimlnRequest) returns (BlastSimlnResponse) {}
+    rpc GetPubKey (BlastPubKeyRequest) returns (BlastPubKeyResponse) {}
+    rpc ListPeers (BlastPeersRequest) returns (BlastPeersResponse) {}
     rpc WalletBalance (BlastRpcRequest) returns (BlastRpcResponse) {}
     rpc ChannelBalance (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc ListPeers (BlastRpcRequest) returns (BlastRpcResponse) {}
     rpc ListChannels (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc GetInfo (BlastRpcRequest) returns (BlastRpcResponse) {}
     rpc OpenChannel (BlastRpcRequest) returns (BlastRpcResponse) {}
     rpc CloseChannel (BlastRpcRequest) returns (BlastRpcResponse) {}
     rpc ConnectPeer (BlastRpcRequest) returns (BlastRpcResponse) {}
     rpc DisconnectPeer (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc GetSimLn (BlastRpcRequest) returns (BlastRpcResponse) {}
+}
+
+message BlastStartRequest {
+    int32 num_nodes = 1;
+}
+
+message BlastStartResponse {
+    bool success = 1;
+}
+
+message BlastSimlnRequest {
+}
+
+message BlastSimlnResponse {
+    bytes simln_data = 1;
+}
+
+message BlastPubKeyRequest {
+    string node = 1;
+}
+
+message BlastPubKeyResponse {
+    string pub_key = 1;
+}
+
+message BlastPeersRequest {
+    string node = 1;
+}
+
+message BlastPeersResponse {
+    string peers = 1;
 }
 
 message BlastRpcRequest {

@@ -23,16 +23,19 @@ async fn main() -> anyhow::Result<()> {
     // -------------------------------------------------------------------------------------------------------------------------------
 
     // Create and start blast_lnd nodes (2) -- use blast_core library
-    let mut child = blast.create_nodes(String::from("blast_lnd"), 2, running.clone()).await.unwrap();
+    let mut child = blast.start_model(String::from("blast_lnd"), running.clone()).await.unwrap();
+
+    // Call start_nodes on blast_lnd
+    blast.start_nodes(String::from("blast_lnd"), 2).await;
+
+    // Call get_pub_key on blast_lnd node 0
+    blast.get_pub_key(String::from("blast-0000")).await;
 
     // Call list_peers on blast_lnd node 0
     blast.list_peers(String::from("blast-0000")).await;
 
-    // Call get_info on blast_lnd node 0
-    blast.get_info(String::from("blast-0000")).await;
-
     // Start the simulation
-    blast.run_simulation();
+    blast.start_simulation();
 
     // -------------------------------------------------------------------------------------------------------------------------------
 
