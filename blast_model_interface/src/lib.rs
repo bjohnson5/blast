@@ -11,7 +11,6 @@ use std::path::Path;
 use std::fs;
 
 use tonic::transport::Channel;
-
 use serde::Deserialize;
 
 use blast_proto::blast_rpc_client::BlastRpcClient;
@@ -22,19 +21,20 @@ pub mod blast_proto {
     tonic::include_proto!("blast_proto");
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct ModelConfig {
     name: String,
     rpc: String,
     start: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlastModel {
     rpc_connection: Option<BlastRpcClient<Channel>>,
     config: ModelConfig
 }
 
+#[derive(Clone)]
 pub struct BlastModelInterface {
     models: HashMap<String, BlastModel>
 }
@@ -45,52 +45,49 @@ impl BlastModelInterface {
             models: parse_models(),
         };
 
-        println!("{:?}", blast_model_interface.models);
-
         blast_model_interface
     }
 
-    pub async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Option<Child> {
+    pub async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Result<Child, String> {
         let model = match self.models.get_mut(&model) {
             Some(model) => {
                 model
             },
             None => {
-                println!("Failed to get the model");
-                return None;
+                return Err(String::from("Failed to get the model"));
             }
         };
 
         let mut current_dir = match env::current_dir() {
             Ok(d) => d,
             Err(_) => {
-                println!("Failed to get the current directory");
-                return None;
+                return Err(String::from("Failed to get the current directory"));
             }
         };
     
         current_dir.push("../blast_models/".to_owned()+&model.config.name+"/"+&model.config.start);
         let model_dir = current_dir.to_string_lossy().into_owned();
-
-        let child = Command::new(model_dir)
-            .spawn()
-            .expect("Failed to execute process");
+        let child = match Command::new(model_dir).spawn() {
+            Ok(c) => {
+                c
+            },
+            Err(_) => {
+                return Err(String::from("Failed to execute process"));
+            }
+        };
 
         let channel: Channel;
         let address = "http://".to_owned()+&model.config.rpc;
         loop {
             match Channel::from_shared(address.clone()).unwrap().connect().await {
                 Ok(c) => {
-                    println!("Connected to server successfully!");
                     channel = c;
                     break;
                 }
-                Err(err) => {
+                Err(_) => {
                     if !running.load(Ordering::SeqCst) {
-                        return None;
+                        return Err(String::from("Could not connect to model"));
                     }
-                    println!("Failed to connect to server: {}", err);
-                    // Add some delay before retrying
                     sleep(std::time::Duration::from_secs(1));
                 }
             }
@@ -98,17 +95,16 @@ impl BlastModelInterface {
 
         model.rpc_connection = Some(BlastRpcClient::new(channel.to_owned()));
 
-        Some(child)
+        Ok(child)
     }
 
-    pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), Box<dyn std::error::Error>> {
-        //start nodes
+    pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<String, String> {
         let model = match self.models.get_mut(&model) {
             Some(model) => {
                 model
             },
             None => {
-                return Ok(());
+                return Err(String::from("Could not get model"));
             }
         };
 
@@ -117,32 +113,51 @@ impl BlastModelInterface {
                 c
             },
             None => {
-                return Ok(());
+                return Err(String::from("Could not get model connection"));
             }
         };
+
         let request = tonic::Request::new(BlastStartRequest {
             num_nodes: num_nodes,
         });
-        
-        let response = client.start_nodes(request).await?;
+    
+        let response = match client.start_nodes(request).await {
+            Ok(r) => {
+                r
+            },
+            Err(_) => {
+                return Err(String::from("RPC start nodes failed"));
+            }
+        };
+
         if response.get_ref().success {
-            let request = tonic::Request::new(BlastSimlnRequest {
-            });
-            
-            let response = client.get_sim_ln(request).await?;
-            println!("RESPONSE={:?}", response);
+            let request = tonic::Request::new(BlastSimlnRequest {});
+            let response = match client.get_sim_ln(request).await {
+                Ok(r) => {
+                    r
+                },
+                Err(_) => {
+                    return Err(String::from("RPC get_sim_ln failed"));
+                }
+            };
+            let s = match std::str::from_utf8(&response.get_ref().simln_data) {
+                Ok(v) => v,
+                Err(_) => return Err(String::from("Invalid UTF-8 sequence")),
+            };
+            return Ok(String::from(s));
+        } else {
+            return Err(String::from("Could not get simln data"));
         }
-        Ok(())
     }
 
-    pub async fn get_pub_key(&mut self, node_id: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn get_pub_key(&mut self, node_id: String) -> Result<String, String> {
         // TODO: look up the node_id and find which model it belongs too
         let model = match self.models.get_mut(&String::from("blast_lnd")) {
             Some(model) => {
                 model
             },
             None => {
-                return Ok(());
+                return Err(String::from("Could not get model"));
             }
         };
 
@@ -151,26 +166,34 @@ impl BlastModelInterface {
                 c
             },
             None => {
-                return Ok(());
+                return Err(String::from("Could not get model connection"));
             }
         };
+
         let request = tonic::Request::new(BlastPubKeyRequest {
             node: node_id,
         });
-        
-        let response = client.get_pub_key(request).await?;
-        println!("RESPONSE={:?}", response);
-        Ok(())
+
+        let response = match client.get_pub_key(request).await {
+            Ok(r) => {
+                r
+            },
+            Err(_) => {
+                return Err(String::from("RPC get_pub_key failed"));
+            }
+        };
+
+        Ok(response.get_ref().pub_key.clone())
     }
 
-    pub async fn list_peers(&mut self, node_id: String) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn list_peers(&mut self, node_id: String) -> Result<String, String> {
         // TODO: look up the node_id and find which model it belongs too
         let model = match self.models.get_mut(&String::from("blast_lnd")) {
             Some(model) => {
                 model
             },
             None => {
-                return Ok(());
+                return Err(String::from("Could not get model"));
             }
         };
 
@@ -179,15 +202,24 @@ impl BlastModelInterface {
                 c
             },
             None => {
-                return Ok(());
+                return Err(String::from("Could not get model connection"));
             }
         };
+
         let request = tonic::Request::new(BlastPeersRequest {
             node: node_id,
         });
-        let response = client.list_peers(request).await?;
-        println!("RESPONSE={:?}", response);
-        Ok(())
+
+        let response = match client.list_peers(request).await {
+            Ok(r) => {
+                r
+            },
+            Err(_) => {
+                return Err(String::from("RPC list_peers failed"));
+            }
+        };
+
+        Ok(response.get_ref().peers.clone())
     }
 }
 
@@ -196,21 +228,21 @@ fn parse_models() -> HashMap<String, BlastModel> {
     let mut current_dir = match env::current_dir() {
         Ok(d) => d,
         Err(_) => {
-            println!("Failed to get the current directory");
             return model_map;
         }
     };
 
     current_dir.push("../blast_models/");
-
     check_for_model(&current_dir.as_path(), 0, &mut model_map);
-    return model_map;
+
+    model_map
 }
 
 fn check_for_model(dir_path: &Path, current_depth: usize, model_map: &mut HashMap<String, BlastModel>) {
     if current_depth > 1 {
         return;
     }
+
     if let Ok(entries) = fs::read_dir(dir_path) {
         for entry in entries {
             if let Ok(entry) = entry {
@@ -224,7 +256,6 @@ fn check_for_model(dir_path: &Path, current_depth: usize, model_map: &mut HashMa
                             mc
                         },
                         Err(_) => {
-                            println!("Error reading model.json file.");
                             continue;
                         }
                     };
@@ -240,13 +271,8 @@ fn check_for_model(dir_path: &Path, current_depth: usize, model_map: &mut HashMa
 }
 
 fn read_model_from_file<P: AsRef<Path>>(path: P) -> Result<ModelConfig, Box<dyn Error>> {
-    // Open the file in read-only mode with buffer.
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-
-    // Read the JSON contents of the file as an instance of `User`.
     let u = serde_json::from_reader(reader)?;
-
-    // Return the `User`.
     Ok(u)
 }

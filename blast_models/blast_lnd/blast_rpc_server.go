@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 
@@ -15,11 +15,11 @@ type BlastRpcServer struct {
 }
 
 func (s *BlastRpcServer) StartNodes(ctx context.Context, request *pb.BlastStartRequest) (*pb.BlastStartResponse, error) {
-	s.blast_lnd.start_nodes(int(request.NumNodes))
+	err := s.blast_lnd.start_nodes(int(request.NumNodes))
 	response := &pb.BlastStartResponse{
-		Success: true,
+		Success: err == nil,
 	}
-	return response, nil
+	return response, err
 }
 
 func (s *BlastRpcServer) GetSimLn(ctx context.Context, request *pb.BlastSimlnRequest) (*pb.BlastSimlnResponse, error) {
@@ -30,45 +30,47 @@ func (s *BlastRpcServer) GetSimLn(ctx context.Context, request *pb.BlastSimlnReq
 }
 
 func (s *BlastRpcServer) GetPubKey(ctx context.Context, request *pb.BlastPubKeyRequest) (*pb.BlastPubKeyResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastPubKeyResponse{
+		PubKey: "",
+	}
+
 	if con, ok := s.blast_lnd.clients[request.Node]; ok {
 		client := lnrpc.NewLightningClient(con)
 		req := &lnrpc.GetInfoRequest{}
 		ctx := context.Background()
 		resp, err := client.GetInfo(ctx, req)
 		if err != nil {
-			fmt.Println("Error calling the node " + err.Error())
+			err_val = err
+		} else {
+			err_val = nil
+			response.PubKey = resp.IdentityPubkey
 		}
-		response := &pb.BlastPubKeyResponse{
-			PubKey: resp.IdentityPubkey,
-		}
-		return response, nil
 	}
 
-	response := &pb.BlastPubKeyResponse{
-		PubKey: "unknown",
-	}
-	return response, nil
+	return response, err_val
 }
 
 func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastPeersRequest) (*pb.BlastPeersResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastPeersResponse{
+		Peers: "{}",
+	}
+
 	if con, ok := s.blast_lnd.clients[request.Node]; ok {
 		client := lnrpc.NewLightningClient(con)
 		req := &lnrpc.ListPeersRequest{LatestError: true}
 		ctx := context.Background()
 		resp, err := client.ListPeers(ctx, req)
 		if err != nil {
-			fmt.Println("Error calling the node " + err.Error())
+			err_val = err
+		} else {
+			err_val = nil
+			response.Peers = resp.String()
 		}
-		response := &pb.BlastPeersResponse{
-			Peers: resp.String(),
-		}
-		return response, nil
 	}
 
-	response := &pb.BlastPeersResponse{
-		Peers: "{}",
-	}
-	return response, nil
+	return response, err_val
 }
 
 func (s *BlastRpcServer) WalletBalance(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {

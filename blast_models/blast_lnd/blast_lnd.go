@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	pb "blast_lnd/blast_proto" // Import your generated proto file
+	pb "blast_lnd/blast_proto"
 )
 
 const configfile string = `listen=3%[1]s
@@ -35,6 +35,7 @@ letsencryptdir=%[2]s/lnd%[1]s/letsencrypt
 watchtower.towerdir=%[2]s/lnd%[1]s/data/watchtower
 noseedbackup=true
 no-macaroons=true
+accept-keysend=1
 
 [bitcoin]
 bitcoin.active=1
@@ -88,24 +89,26 @@ func main() {
 		defer wg.Done()
 		// Wait for OS signal
 		<-sigCh
-		log.Println("Received shutdown signal")
+		blast_lnd_log("Received shutdown signal")
 		server.GracefulStop()
 	}()
+
+	blast_lnd_log("Model started")
 
 	wg.Wait()
 }
 
-func (blnd *BlastLnd) start_nodes(num_nodes int) {
+func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 	shutdownInterceptor, err := signal.Intercept()
 	if err != nil {
-		fmt.Println("Could not set up shutdown interceptor.")
-		os.Exit(1)
+		blast_lnd_log("Could not set up shutdown interceptor.")
+		return err
 	}
 
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
-		fmt.Println("Could not get executable directory.")
-		os.Exit(1)
+		blast_lnd_log("Could not get executable directory.")
+		return err
 	}
 
 	blast_data_dir := dir + "/blast_data"
@@ -113,39 +116,40 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) {
 
 	for i := 0; i < num_nodes; i++ {
 		node_id := pad_with_zeros(i, 4)
-		fmt.Println("Creating node: " + node_id)
-
 		lnddir := blast_data_dir + "/lnd" + node_id + "/"
-		write_config(node_id, blast_data_dir, lnddir)
+		err := write_config(node_id, blast_data_dir, lnddir)
+		if err != nil {
+			blast_lnd_log("Error writing lnd config to file: " + err.Error())
+			return err
+		}
 		lnd.DefaultLndDir = lnddir
 		lnd.DefaultConfigFile = lnddir + "lnd.conf"
 		loadedConfig, err := lnd.LoadConfig(shutdownInterceptor)
 		if err != nil {
 			if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
-				fmt.Println("Error loading config.")
-				os.Exit(1)
+				blast_lnd_log("Error loading config.")
 			}
-			os.Exit(0)
+			return err
 		}
 		implCfg := loadedConfig.ImplementationConfig(shutdownInterceptor)
 
-		n := SimLnNode{Id: "blast-" + node_id, Address: "localhost:4" + node_id, Macaroon: "", Cert: blast_data_dir + "/lnd" + node_id + "/tls.cert"}
+		n := SimLnNode{Id: "blast-" + node_id, Address: "localhost:4" + node_id, Macaroon: "/home/admin.macaroon", Cert: blast_data_dir + "/lnd" + node_id + "/tls.cert"}
 		node_list.Nodes = append(node_list.Nodes, n)
 
 		blnd.wg.Add(1)
 		go start_lnd(loadedConfig, implCfg, shutdownInterceptor, blnd.wg)
 
 		if i%10 == 0 {
-			fmt.Println("Sleeping for 10 seconds...")
 			time.Sleep(10 * time.Second)
 		}
 	}
 
-	for _, n := range node_list.Nodes {
+	for i, n := range node_list.Nodes {
 		var tlsCreds credentials.TransportCredentials
 		tlsCreds, err = credentials.NewClientTLSFromFile(n.Cert, "")
 		if err != nil {
-			fmt.Println("error reading TLS cert: %w", err)
+			blast_lnd_log("Error reading TLS cert" + err.Error())
+			continue
 		}
 
 		opts := []grpc.DialOption{
@@ -154,23 +158,30 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) {
 		}
 		client, err := grpc.Dial(n.Address, opts...)
 		if err != nil {
-			fmt.Println("Error connecting to node: " + n.Id)
+			blast_lnd_log("Error connecting to node: " + n.Id)
+			continue
 		}
 
 		blnd.clients[n.Id] = client
+		node_id := pad_with_zeros(i, 4)
+		node_list.Nodes[i].Address = "https://" + "127.0.0.1:4" + node_id
 	}
 
-	blnd.create_sim_ln_data(node_list, blast_data_dir+"/sim.json")
+	err = blnd.create_sim_ln_data(node_list, blast_data_dir+"/sim.json")
+	if err != nil {
+		blast_lnd_log("Error creating simln data" + err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (blnd *BlastLnd) create_sim_ln_data(obj interface{}, filename string) error {
-	// Marshal object to JSON
 	jsonData, err := json.MarshalIndent(obj, "", "    ")
 	if err != nil {
 		return err
 	}
 
-	// Write JSON data to file
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
@@ -186,6 +197,10 @@ func (blnd *BlastLnd) create_sim_ln_data(obj interface{}, filename string) error
 	return nil
 }
 
+func blast_lnd_log(message string) {
+	log.Println("[BLAST MODEL: blast_lnd] " + message)
+}
+
 func pad_with_zeros(num int, width int) string {
 	numStr := strconv.Itoa(num)
 	numLen := len(numStr)
@@ -197,34 +212,27 @@ func pad_with_zeros(num int, width int) string {
 	return paddedStr
 }
 
-func write_config(num string, currentdir string, dir string) {
-	// Define the target file path and content
+func write_config(num string, currentdir string, dir string) error {
 	filePath := dir + "lnd.conf"
 	conf := fmt.Sprintf(string(configfile), num, currentdir)
 
-	// Ensure the directory structure exists
 	err := ensure_directory_exists(filePath)
 	if err != nil {
-		fmt.Println("Error creating directories:", err)
-		return
+		return err
 	}
 
-	// Open the file for writing
 	file, err := os.Create(filePath)
 	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
+		return err
 	}
 	defer file.Close()
 
-	// Write the content to the file
 	_, err = file.WriteString(conf)
 	if err != nil {
-		fmt.Println("Error writing to file:", err)
-		return
+		return err
 	}
 
-	fmt.Println("File created successfully at:", filePath)
+	return nil
 }
 
 func ensure_directory_exists(filePath string) error {
@@ -233,25 +241,22 @@ func ensure_directory_exists(filePath string) error {
 }
 
 func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
-	// Create a new gRPC server
 	server := grpc.NewServer()
-
-	// Register your service with the server
 	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd})
 
-	// Define the address and start the server
 	address := "localhost:50051"
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		blast_lnd_log("Failed to listen: " + err.Error())
+		return nil
 	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Printf("Server started at %s", address)
+		blast_lnd_log("Server started at " + address)
 		if err := server.Serve(listener); err != nil {
-			log.Fatalf("Failed to serve: %v", err)
+			blast_lnd_log("Failed to serve: " + err.Error())
 		}
 	}()
 
@@ -261,12 +266,7 @@ func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 func start_lnd(cfg *lnd.Config, implCfg *lnd.ImplementationCfg, interceptor signal.Interceptor, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Call the "real" main in a nested manner so the defers will properly
-	// be executed in the case of a graceful shutdown.
-	if err := lnd.Main(
-		cfg, lnd.ListenerCfg{}, implCfg, interceptor,
-	); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	if err := lnd.Main(cfg, lnd.ListenerCfg{}, implCfg, interceptor); err != nil {
+		blast_lnd_log("Could not start lnd: " + err.Error())
 	}
 }
