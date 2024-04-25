@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
@@ -35,8 +36,7 @@ func (s *BlastRpcServer) GetPubKey(ctx context.Context, request *pb.BlastPubKeyR
 		PubKey: "",
 	}
 
-	if con, ok := s.blast_lnd.clients[request.Node]; ok {
-		client := lnrpc.NewLightningClient(con)
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
 		req := &lnrpc.GetInfoRequest{}
 		ctx := context.Background()
 		resp, err := client.GetInfo(ctx, req)
@@ -57,8 +57,7 @@ func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastPeersRe
 		Peers: "{}",
 	}
 
-	if con, ok := s.blast_lnd.clients[request.Node]; ok {
-		client := lnrpc.NewLightningClient(con)
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
 		req := &lnrpc.ListPeersRequest{LatestError: true}
 		ctx := context.Background()
 		resp, err := client.ListPeers(ctx, req)
@@ -73,51 +72,179 @@ func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastPeersRe
 	return response, err_val
 }
 
-func (s *BlastRpcServer) WalletBalance(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
+func (s *BlastRpcServer) WalletBalance(ctx context.Context, request *pb.BlastWalletBalanceRequest) (*pb.BlastWalletBalanceResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastWalletBalanceResponse{
+		Balance: "",
+	}
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.WalletBalanceRequest{}
+		ctx := context.Background()
+		resp, err := client.WalletBalance(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Balance = resp.String()
+		}
+	}
+
+	return response, err_val
+}
+
+func (s *BlastRpcServer) ChannelBalance(ctx context.Context, request *pb.BlastChannelBalanceRequest) (*pb.BlastChannelBalanceResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastChannelBalanceResponse{
+		Balance: "",
+	}
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.ChannelBalanceRequest{}
+		ctx := context.Background()
+		resp, err := client.ChannelBalance(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Balance = resp.String()
+		}
+	}
+
+	return response, err_val
+}
+
+func (s *BlastRpcServer) ListChannels(ctx context.Context, request *pb.BlastListChannelsRequest) (*pb.BlastListChannelsResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastListChannelsResponse{
+		Channels: "",
+	}
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.ListChannelsRequest{}
+		ctx := context.Background()
+		resp, err := client.ListChannels(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Channels = resp.String()
+		}
+	}
+
+	return response, err_val
+}
+
+func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenChannelRequest) (*pb.BlastOpenChannelResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastOpenChannelResponse{
+		Success: false,
+	}
+
+	nodePubHex, err := hex.DecodeString(request.PeerPubKey)
+	if err != nil {
+		err_val = err
+	}
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.OpenChannelRequest{
+			NodePubkey:         nodePubHex,
+			LocalFundingAmount: request.Amount,
+			PushSat:            request.PushAmout,
+		}
+		ctx := context.Background()
+		_, err := client.OpenChannel(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Success = true
+		}
+	}
+
+	return response, err_val
+}
+
+func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastCloseChannelRequest) (*pb.BlastCloseChannelResponse, error) {
+	response := &pb.BlastCloseChannelResponse{
+		Success: true,
 	}
 	return response, nil
 }
 
-func (s *BlastRpcServer) ChannelBalance(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
+func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastConnectRequest) (*pb.BlastConnectResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastConnectResponse{
+		Success: false,
 	}
-	return response, nil
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.ConnectPeerRequest{Addr: &lnrpc.LightningAddress{Pubkey: request.PeerPubKey, Host: request.PeerAddr}, Perm: false, Timeout: 5}
+		ctx := context.Background()
+		_, err := client.ConnectPeer(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Success = true
+		}
+	}
+
+	return response, err_val
 }
 
-func (s *BlastRpcServer) ListChannels(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
+func (s *BlastRpcServer) DisconnectPeer(ctx context.Context, request *pb.BlastDisconnectRequest) (*pb.BlastDisconnectResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastDisconnectResponse{
+		Success: false,
 	}
-	return response, nil
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.DisconnectPeerRequest{PubKey: request.PeerPubKey}
+		ctx := context.Background()
+		_, err := client.DisconnectPeer(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Success = true
+		}
+	}
+
+	return response, err_val
 }
 
-func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
+func (s *BlastRpcServer) GetBtcAddress(ctx context.Context, request *pb.BlastBtcAddressRequest) (*pb.BlastBtcAddressResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastBtcAddressResponse{
+		Address: "",
 	}
-	return response, nil
+
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.NewAddressRequest{Type: 4}
+		ctx := context.Background()
+		resp, err := client.NewAddress(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Address = resp.Address
+		}
+	}
+
+	return response, err_val
 }
 
-func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
+func (s *BlastRpcServer) GetListenAddress(ctx context.Context, request *pb.BlastListenAddressRequest) (*pb.BlastListenAddressResponse, error) {
+	err_val := errors.New("could not find node connection")
+	response := &pb.BlastListenAddressResponse{
+		Address: "",
 	}
-	return response, nil
-}
 
-func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
+	if addr, ok := s.blast_lnd.listen_addresses[request.Node]; ok {
+		err_val = nil
+		response.Address = addr
 	}
-	return response, nil
-}
 
-func (s *BlastRpcServer) DisconnectPeer(ctx context.Context, request *pb.BlastRpcRequest) (*pb.BlastRpcResponse, error) {
-	response := &pb.BlastRpcResponse{
-		Response: "Unimplemented",
-	}
-	return response, nil
+	return response, err_val
 }

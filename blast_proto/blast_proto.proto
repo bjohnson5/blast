@@ -8,13 +8,15 @@ service BlastRpc {
     rpc GetSimLn (BlastSimlnRequest) returns (BlastSimlnResponse) {}
     rpc GetPubKey (BlastPubKeyRequest) returns (BlastPubKeyResponse) {}
     rpc ListPeers (BlastPeersRequest) returns (BlastPeersResponse) {}
-    rpc WalletBalance (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc ChannelBalance (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc ListChannels (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc OpenChannel (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc CloseChannel (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc ConnectPeer (BlastRpcRequest) returns (BlastRpcResponse) {}
-    rpc DisconnectPeer (BlastRpcRequest) returns (BlastRpcResponse) {}
+    rpc WalletBalance (BlastWalletBalanceRequest) returns (BlastWalletBalanceResponse) {}
+    rpc ChannelBalance (BlastChannelBalanceRequest) returns (BlastChannelBalanceResponse) {}
+    rpc ListChannels (BlastListChannelsRequest) returns (BlastListChannelsResponse) {}
+    rpc OpenChannel (BlastOpenChannelRequest) returns (BlastOpenChannelResponse) {}
+    rpc CloseChannel (BlastCloseChannelRequest) returns (BlastCloseChannelResponse) {}
+    rpc ConnectPeer (BlastConnectRequest) returns (BlastConnectResponse) {}
+    rpc DisconnectPeer (BlastDisconnectRequest) returns (BlastDisconnectResponse) {}
+    rpc GetBtcAddress(BlastBtcAddressRequest) returns (BlastBtcAddressResponse) {}
+    rpc GetListenAddress(BlastListenAddressRequest) returns (BlastListenAddressResponse) {}
 }
 
 message BlastStartRequest {
@@ -48,10 +50,80 @@ message BlastPeersResponse {
     string peers = 1;
 }
 
-message BlastRpcRequest {
+message BlastWalletBalanceRequest {
     string node = 1;
 }
 
-message BlastRpcResponse {
-    string response = 1;
+message BlastWalletBalanceResponse {
+    string balance = 1;
+}
+
+message BlastChannelBalanceRequest {
+    string node = 1;
+}
+
+message BlastChannelBalanceResponse {
+    string balance = 1;
+}
+
+message BlastListChannelsRequest {
+    string node = 1;
+}
+
+message BlastListChannelsResponse {
+    string channels = 1;
+}
+
+message BlastOpenChannelRequest {
+    string node = 1;
+    string peer_pub_key = 2;
+    int64 amount = 3;
+    int64 push_amout = 4;
+}
+
+message BlastOpenChannelResponse {
+    bool success = 1;
+}
+
+message BlastCloseChannelRequest {
+    string node = 1;
+}
+
+message BlastCloseChannelResponse {
+    bool success = 1;
+}
+
+message BlastConnectRequest {
+    string node = 1;
+    string peer_pub_key = 2;
+    string peer_addr = 3;
+}
+
+message BlastConnectResponse {
+    bool success = 1;
+}
+
+message BlastDisconnectRequest {
+    string node = 1;
+    string peer_pub_key = 2;
+}
+
+message BlastDisconnectResponse {
+    bool success = 1;
+}
+
+message BlastBtcAddressRequest {
+    string node = 1;
+}
+
+message BlastBtcAddressResponse {
+    string address = 1;
+}
+
+message BlastListenAddressRequest {
+    string node = 1;
+}
+
+message BlastListenAddressResponse {
+    string address = 1;
 }

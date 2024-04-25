@@ -17,6 +17,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 	"github.com/lightningnetwork/lnd"
+	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/signal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -36,6 +37,7 @@ watchtower.towerdir=%[2]s/lnd%[1]s/data/watchtower
 noseedbackup=true
 no-macaroons=true
 accept-keysend=1
+debuglevel=warn
 
 [bitcoin]
 bitcoin.active=1
@@ -57,9 +59,10 @@ type SimJsonFile struct {
 }
 
 type BlastLnd struct {
-	clients    map[string]*grpc.ClientConn
-	simln_data []byte
-	wg         *sync.WaitGroup
+	clients          map[string]lnrpc.LightningClient
+	listen_addresses map[string]string
+	simln_data       []byte
+	wg               *sync.WaitGroup
 }
 
 func main() {
@@ -81,7 +84,7 @@ func main() {
 	}
 	s.Notify(sigCh, signalsToCatch...)
 
-	blast_lnd := BlastLnd{clients: make(map[string]*grpc.ClientConn), wg: &wg}
+	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), wg: &wg}
 	server := start_grpc_server(&wg, &blast_lnd)
 
 	wg.Add(1)
@@ -162,10 +165,13 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 			continue
 		}
 
-		blnd.clients[n.Id] = client
+		blnd.clients[n.Id] = lnrpc.NewLightningClient(client)
 		node_id := pad_with_zeros(i, 4)
 		node_list.Nodes[i].Address = "https://" + "127.0.0.1:4" + node_id
+		blnd.listen_addresses["blast-"+node_id] = "localhost:3" + node_id
 	}
+
+	time.Sleep(10 * time.Second)
 
 	err = blnd.create_sim_ln_data(node_list, blast_data_dir+"/sim.json")
 	if err != nil {
