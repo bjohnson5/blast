@@ -41,10 +41,50 @@ BLAST development will all take place in this repository and will be broken down
 - `research` - Data collected during LN implementation research
 
 # Build
-Coming soon...
+### Install bitcoind
+```bash
+wget https://bitcoin.org/bin/bitcoin-core-25.0/bitcoin-25.0-x86_64-linux-gnu.tar.gz
+tar xzf bitcoin-25.0-x86_64-linux-gnu.tar.gz
+sudo install -m 0755 -o root -g root -t /usr/local/bin bitcoin-25.0/bin/*
+```
+
+### Install Rust
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+### Install Go
+```bash
+wget https://go.dev/dl/go1.20.1.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.22.2.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin
+```
+
+### Install blast
+```bash
+git clone git@github.com:bjohnson5/blast.git
+./build.sh
+```
 
 # Run
-Coming soon...
+### Run CLI
+> There is no CLI yet. This is only a testing application right now, it will run some hard coded blast operations.
+```bash
+./start_bitcoind.sh
+./run_cli.sh
+```
+
+### Run Web Application
+> There is no web application yet. This is an empty project right now.
+```bash
+./start_bitcoind.sh
+./run_web.sh
+```
+
+### Stop / Reset Network
+```bash
+./stop_bitcoind.sh
+```
 
 # Contribute
 Coming soon...
