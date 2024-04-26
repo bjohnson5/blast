@@ -17,6 +17,7 @@ service BlastRpc {
     rpc DisconnectPeer (BlastDisconnectRequest) returns (BlastDisconnectResponse) {}
     rpc GetBtcAddress(BlastBtcAddressRequest) returns (BlastBtcAddressResponse) {}
     rpc GetListenAddress(BlastListenAddressRequest) returns (BlastListenAddressResponse) {}
+    rpc StopModel(BlastStopModelRequest) returns (BlastStopModelResponse) {}
 }
 
 message BlastStartRequest {
@@ -126,4 +127,11 @@ message BlastListenAddressRequest {
 
 message BlastListenAddressResponse {
     string address = 1;
+}
+
+message BlastStopModelRequest {
+}
+
+message BlastStopModelResponse {
+    bool success = 1;
 }

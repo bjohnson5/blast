@@ -71,14 +71,40 @@ impl Blast {
         Ok(blast)
     }
 
-    /// Set up Simln
-    pub async fn set_simln(&mut self) -> anyhow::Result<()> {
-        let sim = self.setup_simln().await?;
-        self.simln = Some(sim);
-        Ok(())
+    /// Load the simulation. This will start the models and nodes, fund them with initial balances, open initial channels, etc.
+    pub async fn load_simulation(&mut self, running: Arc<AtomicBool>) -> Result<Child, String> {
+        // TODO: load the configured network and get rid of hard coded blast_lnd and number of nodes
+        // TODO: will need to start all the models that are needed for this simulation
+        // TODO: will need to start the correct number of nodes for each model
+        let child = self.start_model(String::from("blast_lnd"), running.clone()).await?;
+    
+        match self.start_nodes(String::from("blast_lnd"), 2).await {
+            Ok(_) => {},
+            Err(e) => {
+                return Err(format!("Unable to start nodes: {}", e));
+            }
+        }
+
+        // TODO: use defined payment activity for simln -- add payment json to the simln_json object
+
+        match self.setup_simln().await {
+            Ok(s) => {
+                self.simln = Some(s);
+            },
+            Err(e) => {
+                return Err(format!("Failed to setup simln: {:?}", e));
+            }
+        };
+
+        Ok(child)
     }
 
-    /// Start the simulation.
+    /// Unload the simulation. This will shutdown the models and nodes.
+    pub async fn unload_simulation(&mut self) -> Result<(), String> {
+        self.stop_model(String::from("blast_lnd")).await
+    }
+
+    /// Start the simulation. This will start the simulation events and the simln transaction generation.
     pub async fn start_simulation(&mut self) -> anyhow::Result<()> {
         // Set up the logger
         SimpleLogger::new()
@@ -88,160 +114,116 @@ impl Blast {
 
         log::info!("Running BLAST Simulation");
 
-        log::info!("Running BLAST Event Manager");
         // TODO: start the event thread
-
-        log::info!("Running SimLN Simulation");
         
+        // Start the simln thread
         match &self.simln {
             Some(s) => {
                 s.run().await?;
             },
             None => {
-                return Err(anyhow!("SimLN not setup. Call set_simln before running the simulation"));
+                return Err(anyhow!("Simln not setup. Call set_simln before running the simulation"));
             }
         }
 
         Ok(())
     }
 
-    /// Stop the simulation.
+    /// Stop the simulation. This will stop the simulation events and the simln transaction generation.
     pub fn stop_simulation(&mut self) {
         log::info!("Stopping BLAST Simulation");
+
+        // TODO: stop the event thread
+
+        // Stop simln thread
         match &self.simln {
             Some(s) => {
-                log::info!("some");
                 s.shutdown();
             },
-            None => {
-                log::info!("none");
-            }
+            None => {}
         };
     }
 
-    /// Start a model by name and wait for the RPC connection to be made.
-    pub async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Result<Child, String> {
-        self.blast_model_interface.start_model(model, running).await
-    }
-    
-    /// Start a given number of nodes for the given model name.
-    pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), String> {
-        match self.blast_model_interface.start_nodes(model, num_nodes).await {
-            Ok(s) => {
-                self.simln_json = Some(s);
-                Ok(())
-            },
-            Err(e) => {
-                Err(format!("Error starting nodes: {}", e))
-            }
-        }
-    }
-
-    /// Get the public key of a node in the simulation.
+    /// Get the public key of a node.
     pub async fn get_pub_key(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_interface.get_pub_key(node_id).await {
-            Ok(s) => {
-                Ok(s)
-            },
-            Err(e) => {
-                Err(format!("Error getting pub key: {}", e))
-            }
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("Error getting pub key: {}", e))
         }
     }
 
-    /// Get the peers of a node in the simulation.
+    /// Get the peers of a node.
     pub async fn list_peers(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_interface.list_peers(node_id).await {
-            Ok(s) => {
-                Ok(s)
-            },
-            Err(e) => {
-                Err(format!("Error getting peers: {}", e))
-            }
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("Error getting peers: {}", e))
         }
     }
 
+    /// Show this nodes on-chain balance.
     pub async fn wallet_balance(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_interface.wallet_balance(node_id).await {
-            Ok(s) => {
-                Ok(s)
-            },
-            Err(e) => {
-                Err(format!("Error getting wallet balance: {}", e))
-            }
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("Error getting wallet balance: {}", e))
         }
     }
 
+    /// Show this nodes off-chain balance.
     pub async fn channel_balance(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_interface.channel_balance(node_id).await {
-            Ok(s) => {
-                Ok(s)
-            },
-            Err(e) => {
-                Err(format!("Error getting channel balance: {}", e))
-            }
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("Error getting channel balance: {}", e))
         }
     }
 
+    /// View open channels on this node.
     pub async fn list_channels(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_interface.list_channels(node_id).await {
-            Ok(s) => {
-                Ok(s)
-            },
-            Err(e) => {
-                Err(format!("Error getting channels: {}", e))
-            }
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("Error getting channels: {}", e))
         }
     }
 
+    /// Open a channel.
     pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64) -> Result<(), String> {
         match self.blast_model_interface.open_channel(node1_id, node2_id, amount, push_amount).await {
             Ok(_) => {
+                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread, also remove the hard coded address and number of blocks
                 thread::sleep(time::Duration::from_secs(10));
                 let mine_address = bitcoincore_rpc::bitcoin::Address::from_str("bcrt1qwl7p045lawx8tx3ecttu0dmt6pqjlrqdlhz6yt").map_err(|e|e.to_string())?
                 .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
                 let _ = self.bitcoin_rpc.as_mut().unwrap().generate_to_address(100, &mine_address).map_err(|e| e.to_string())?;
                 Ok(())
             },
-            Err(e) => {
-                Err(format!("Error opening a channel: {}", e))
-            }
+            Err(e) => Err(format!("Error opening a channel: {}", e))
         }
     }
 
+    /// Close a channel.
     pub async fn close_channel(&mut self) -> Result<(), String> {
         match self.blast_model_interface.close_channel().await {
-            Ok(_) => {
-                Ok(())
-            },
-            Err(e) => {
-                Err(format!("Error closing a channel: {}", e))
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error closing a channel: {}", e))
         }
     }
 
+    /// Add a peer.
     pub async fn connect_peer(&mut self, node1_id: String, node2_id: String) -> Result<(), String> {
         match self.blast_model_interface.connect_peer(node1_id, node2_id).await {
-            Ok(_) => {
-                Ok(())
-            },
-            Err(e) => {
-                Err(format!("Error connecting to peer: {}", e))
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error connecting to peer: {}", e))
         }
     }
 
+    /// Remove a peer.
     pub async fn disconnect_peer(&mut self, node1_id: String, node2_id: String) -> Result<(), String> {
         match self.blast_model_interface.disconnect_peer(node1_id, node2_id).await {
-            Ok(_) => {
-                Ok(())
-            },
-            Err(e) => {
-                Err(format!("Error disconnecting from peer: {}", e))
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error disconnecting from peer: {}", e))
         }
     }
 
+    /// Send funds to a node on-chain.
     pub async fn fund_node(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_interface.get_btc_address(node_id).await {
             Ok(a) => {
@@ -250,17 +232,38 @@ impl Blast {
                 let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, bitcoincore_rpc::bitcoin::Amount::ONE_BTC, None, None, None, None, None, None)
                 .map_err(|e| e.to_string())?;
 
+                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread, also remove the hard coded address and number of blocks
                 let mine_address = bitcoincore_rpc::bitcoin::Address::from_str("bcrt1qwl7p045lawx8tx3ecttu0dmt6pqjlrqdlhz6yt").map_err(|e|e.to_string())?
                 .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
                 let _ = self.bitcoin_rpc.as_mut().unwrap().generate_to_address(100, &mine_address).map_err(|e| e.to_string())?;
                 Ok(format!("{}", txid))
             },
-            Err(e) => {
-                Err(format!("Error getting address: {}", e))
-            }
+            Err(e) => Err(format!("Error getting address: {}", e))
         }
     }
 
+    /// Start a model by name and wait for the RPC connection to be made.
+    async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Result<Child, String> {
+        self.blast_model_interface.start_model(model, running).await
+    }
+
+    /// Stop a model by name.
+    async fn stop_model(&mut self, model: String) -> Result<(), String>{
+        self.blast_model_interface.stop_model(model).await
+    }
+    
+    /// Start a given number of nodes for the given model name.
+    async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), String> {
+        match self.blast_model_interface.start_nodes(model, num_nodes).await {
+            Ok(s) => {
+                self.simln_json = Some(s);
+                Ok(())
+            },
+            Err(e) => Err(format!("Error starting nodes: {}", e))
+        }
+    }
+
+    /// Create a simln simulation from the json data blast gets from each model in the sim.
     async fn setup_simln(&self) -> Result<Simulation, anyhow::Error> {
         let SimParams { nodes, activity } = 
         serde_json::from_str(&self.simln_json.as_ref().unwrap())
@@ -354,11 +357,11 @@ impl Blast {
             EXPECTED_PAYMENT_AMOUNT,
             ACTIVITY_MULTIPLIER,
             Some(WriteResults {
+                // TODO: remove hard coded values
                 results_dir: PathBuf::from(String::from("/home/simln_results")),
                 batch_size: 1,
             })
         );
         Ok(sim)
     }
-
 }

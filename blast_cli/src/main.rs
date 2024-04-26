@@ -21,26 +21,21 @@ async fn main() {
     // Create the blast core object
     let mut blast = Blast::new().expect("Could not create Blast");
 
-    // Example operations that the blast cli will need to do -- will eventually be cleaned up -- testing purposes only right now
-    // -------------------------------------------------------------------------------------------------------------------------------
+    // TODO: configure the simulation: add nodes, models, channels, events, etc...
 
-    let mut child = match blast.start_model(String::from("blast_lnd"), running.clone()).await {
-        Ok(c) => {
-            c
-        },
+    let mut child = match blast.load_simulation(running.clone()).await {
+        Ok(c) => c,
         Err(e) => {
-            println!("{}", format!("Unable to start the model: {}", e));
+            println!("{}", format!("Unable to load simulation: {}", e));
             return;
         }
     };
 
-    match blast.start_nodes(String::from("blast_lnd"), 2).await {
-        Ok(_) => {},
-        Err(e) => {
-            println!("{}", format!("Unable to start nodes: {}", e));
-            return;
-        }
-    }
+    // Example operations that the blast cli will need to do -- will eventually be cleaned up -- testing purposes only right now
+    // TODO: add command line interface to let the user make these calls
+    // -------------------------------------------------------------------------------------------------------------------------------
+
+    // TODO: Add a call to list all nodes so that the user can choose which node name to use in these calls
 
     match blast.get_pub_key(String::from("blast-0000")).await {
         Ok(s) => {
@@ -254,30 +249,24 @@ async fn main() {
         }
     }
 
-    // TODO: Create a close channel event at a certain time
+    // TODO: Add test call for close channel rpc
+    // TODO: Add a close channel event at a certain time
+    // TODO: Add an open channel event at a certain time
 
     // -------------------------------------------------------------------------------------------------------------------------------
 
     // Start the simulation
     let mut sim_tasks = JoinSet::new();
-    match blast.set_simln().await {
-        Ok(_) => {
-            let mut blast2 = blast.clone();
-            sim_tasks.spawn(async move {
-                match blast2.start_simulation().await {
-                    Ok(_) => {},
-                    Err(e) => {
-                        println!("Failed to start the simulation: {:?}", e);
-                        return;
-                    }
-                }
-            });
-        },
-        Err(e) => {
-            println!("Failed to setup simln: {:?}", e);
-            return;
+    let mut blast2 = blast.clone();
+    sim_tasks.spawn(async move {
+        match blast2.start_simulation().await {
+            Ok(_) => {},
+            Err(e) => {
+                println!("Failed to start the simulation: {:?}", e);
+                return;
+            }
         }
-    }
+    });
 
     // Wait for Ctrl+C signal to shutdown
     while running.load(Ordering::SeqCst) {
@@ -287,16 +276,30 @@ async fn main() {
     // Stop the blast simulation
     blast.stop_simulation();
 
-    // Wait for blast simulation to exit
+    // Stop the models
+    match blast.unload_simulation().await {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Failed to unload the simulation: {:?}", e);       
+        }
+    }
+
+    // Wait for blast simulation to stop
     while let Some(res) = sim_tasks.join_next().await {
         if let Err(_) = res {
             println!("Error waiting for simulation to stop");
         }
     }
 
-    // Wait for the models to exit... the models are responsible for handling ctrlc themselves
-    let exit_status = child.wait().expect("failed to wait on child process");
-    println!("Child process exited with status: {}", exit_status);
+    // Wait for the models to stop
+    let exit_status = match child.wait() {
+        Ok(s) => Some(s),
+        Err(e) => {
+            println!("Failed to wait for child process: {:?}", e);
+            None
+        }
+    };
 
+    println!("Models process exited with status: {:?}", exit_status);
     println!("BLAST CLI shutting down...");
 }

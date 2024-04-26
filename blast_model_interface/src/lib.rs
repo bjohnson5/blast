@@ -54,9 +54,7 @@ impl BlastModelInterface {
     /// Start a model by name and wait for the RPC connection to be made.
     pub async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Result<Child, String> {
         let model = match self.models.get_mut(&model) {
-            Some(model) => {
-                model
-            },
+            Some(model) => model,
             None => {
                 return Err(String::from("Failed to get the model"));
             }
@@ -73,9 +71,7 @@ impl BlastModelInterface {
         let model_dir = current_dir.to_string_lossy().into_owned();
         let child = match Command::new(model_dir)
         .spawn() {
-            Ok(c) => {
-                c
-            },
+            Ok(c) => c,
             Err(_) => {
                 return Err(String::from("Failed to execute process"));
             }
@@ -103,6 +99,27 @@ impl BlastModelInterface {
         Ok(child)
     }
 
+    /// Stop a model. The model process should stop all of its nodes and exit.
+    pub async fn stop_model(&mut self, model: String) -> Result<(), String>{
+        let client = self.get_model_client(model)?;
+
+        let request = tonic::Request::new(BlastStopModelRequest {
+        });
+    
+        let response = match client.stop_model(request).await {
+            Ok(r) => r,
+            Err(_) => {
+                return Err(String::from("RPC stop_model failed"));
+            }
+        };
+
+        if response.get_ref().success {
+            Ok(())
+        } else {
+            Err(String::from("Model did not shutdown successfully"))
+        }
+    }
+
     /// Start a given number of nodes for the given model name.
     pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<String, String> {
         let client = self.get_model_client(model)?;
@@ -112,9 +129,7 @@ impl BlastModelInterface {
         });
     
         let response = match client.start_nodes(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(_) => {
                 return Err(String::from("RPC start nodes failed"));
             }
@@ -123,9 +138,7 @@ impl BlastModelInterface {
         if response.get_ref().success {
             let request = tonic::Request::new(BlastSimlnRequest {});
             let response = match client.get_sim_ln(request).await {
-                Ok(r) => {
-                    r
-                },
+                Ok(r) => r,
                 Err(_) => {
                     return Err(String::from("RPC get_sim_ln failed"));
                 }
@@ -150,9 +163,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.get_pub_key(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC get_pub_key failed: {:?}", e));
             }
@@ -171,9 +182,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.list_peers(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC list_peers failed: {:?}", e));
             }
@@ -191,9 +200,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.wallet_balance(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC wallet_balance failed: {:?}", e));
             }
@@ -211,9 +218,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.channel_balance(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC channel_balance failed: {:?}", e));
             }
@@ -231,9 +236,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.list_channels(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC list_channels failed: {:?}", e));
             }
@@ -256,9 +259,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.open_channel(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC open_channel failed: {:?}", e));
             }
@@ -280,9 +281,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.close_channel(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC close_channel failed: {:?}", e));
             }
@@ -309,9 +308,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.connect_peer(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC connect_peer failed: {:?}", e));
             }
@@ -336,9 +333,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.disconnect_peer(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC disconnect_peer failed: {:?}", e));
             }
@@ -360,9 +355,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.get_btc_address(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC get_btc_address failed: {:?}", e));
             }
@@ -380,9 +373,7 @@ impl BlastModelInterface {
         });
 
         let response = match client.get_listen_address(request).await {
-            Ok(r) => {
-                r
-            },
+            Ok(r) => r,
             Err(e) => {
                 return Err(format!("RPC get_listen_address failed: {:?}", e));
             }
@@ -394,24 +385,16 @@ impl BlastModelInterface {
     /// Get the RPC connection for a model.
     fn get_model_client(&mut self, model: String) -> Result<&mut BlastRpcClient<Channel>, String> {
         let model = match self.models.get_mut(&model) {
-            Some(model) => {
-                model
-            },
+            Some(model) => model,
             None => {
                 return Err(String::from("Could not get model"));
             }
         };
 
-        let client = match &mut model.rpc_connection {
-            Some(c) => {
-                c
-            },
-            None => {
-                return Err(String::from("Could not get model connection"));
-            }
-        };
-
-        Ok(client)
+        match &mut model.rpc_connection {
+            Some(c) => Ok(c),
+            None => Err(String::from("Could not get model connection"))
+        }
     }
 }
 

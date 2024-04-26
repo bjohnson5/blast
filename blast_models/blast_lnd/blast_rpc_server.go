@@ -165,6 +165,7 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 	return response, err_val
 }
 
+// TODO: implement this RPC function
 func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastCloseChannelRequest) (*pb.BlastCloseChannelResponse, error) {
 	response := &pb.BlastCloseChannelResponse{
 		Success: true,
@@ -247,4 +248,16 @@ func (s *BlastRpcServer) GetListenAddress(ctx context.Context, request *pb.Blast
 	}
 
 	return response, err_val
+}
+
+func (s *BlastRpcServer) StopModel(ctx context.Context, request *pb.BlastStopModelRequest) (*pb.BlastStopModelResponse, error) {
+	for _, client := range s.blast_lnd.clients {
+		req := &lnrpc.StopRequest{}
+		ctx := context.Background()
+		client.StopDaemon(ctx, req)
+	}
+
+	response := &pb.BlastStopModelResponse{Success: true}
+	s.blast_lnd.shutdown_ch <- struct{}{}
+	return response, nil
 }

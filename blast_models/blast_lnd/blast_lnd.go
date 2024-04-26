@@ -7,12 +7,10 @@ import (
 	"net"
 	"net/http"
 	"os"
-	s "os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/jessevdk/go-flags"
@@ -24,6 +22,9 @@ import (
 
 	pb "blast_lnd/blast_proto"
 )
+
+// TODO: fix hard coded ports, paths, ids, strings, etc...
+// TODO: fix port numbers so that you can run blast_lnd without root permissions
 
 const configfile string = `listen=3%[1]s
 rpclisten=localhost:4%[1]s
@@ -37,7 +38,7 @@ watchtower.towerdir=%[2]s/lnd%[1]s/data/watchtower
 noseedbackup=true
 no-macaroons=true
 accept-keysend=1
-debuglevel=warn
+debuglevel=error
 
 [bitcoin]
 bitcoin.active=1
@@ -62,6 +63,7 @@ type BlastLnd struct {
 	clients          map[string]lnrpc.LightningClient
 	listen_addresses map[string]string
 	simln_data       []byte
+	shutdown_ch      chan struct{}
 	wg               *sync.WaitGroup
 }
 
@@ -71,27 +73,16 @@ func main() {
 	}()
 
 	var wg sync.WaitGroup
+	shutdown_channel := make(chan struct{})
 
-	// Handle OS signals for graceful shutdown
-	sigCh := make(chan os.Signal, 1)
-	signalsToCatch := []os.Signal{
-		os.Interrupt,
-		os.Kill,
-		syscall.SIGTERM,
-		syscall.SIGQUIT,
-		syscall.SIGKILL,
-		syscall.SIGINT,
-	}
-	s.Notify(sigCh, signalsToCatch...)
-
-	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), wg: &wg}
+	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), shutdown_ch: shutdown_channel, wg: &wg}
 	server := start_grpc_server(&wg, &blast_lnd)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// Wait for OS signal
-		<-sigCh
+		// Wait for shutdown signal
+		<-shutdown_channel
 		blast_lnd_log("Received shutdown signal")
 		server.GracefulStop()
 	}()
