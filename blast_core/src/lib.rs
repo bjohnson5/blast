@@ -188,10 +188,11 @@ impl Blast {
     pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64) -> Result<(), String> {
         match self.blast_model_interface.open_channel(node1_id, node2_id, amount, push_amount).await {
             Ok(_) => {
-                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread, also remove the hard coded address and number of blocks
+                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread
                 thread::sleep(time::Duration::from_secs(10));
-                let mine_address = bitcoincore_rpc::bitcoin::Address::from_str("bcrt1qwl7p045lawx8tx3ecttu0dmt6pqjlrqdlhz6yt").map_err(|e|e.to_string())?
-                .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
+                let mine_address = self.bitcoin_rpc.as_mut().unwrap().get_new_address(None, Some(bitcoincore_rpc::bitcoincore_rpc_json::AddressType::P2shSegwit))
+                .unwrap().require_network(bitcoincore_rpc::bitcoin::Network::Regtest)
+                .map_err(|e|e.to_string())?;
                 let _ = self.bitcoin_rpc.as_mut().unwrap().generate_to_address(100, &mine_address).map_err(|e| e.to_string())?;
                 Ok(())
             },
@@ -232,9 +233,10 @@ impl Blast {
                 let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, bitcoincore_rpc::bitcoin::Amount::ONE_BTC, None, None, None, None, None, None)
                 .map_err(|e| e.to_string())?;
 
-                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread, also remove the hard coded address and number of blocks
-                let mine_address = bitcoincore_rpc::bitcoin::Address::from_str("bcrt1qwl7p045lawx8tx3ecttu0dmt6pqjlrqdlhz6yt").map_err(|e|e.to_string())?
-                .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
+                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread
+                let mine_address = self.bitcoin_rpc.as_mut().unwrap().get_new_address(None, Some(bitcoincore_rpc::bitcoincore_rpc_json::AddressType::P2shSegwit))
+                .unwrap().require_network(bitcoincore_rpc::bitcoin::Network::Regtest)
+                .map_err(|e|e.to_string())?;
                 let _ = self.bitcoin_rpc.as_mut().unwrap().generate_to_address(100, &mine_address).map_err(|e| e.to_string())?;
                 Ok(format!("{}", txid))
             },
