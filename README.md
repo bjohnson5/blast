@@ -8,8 +8,6 @@
 - [Repo Tour](#repo-tour)
 - [Build](#build)
 - [Run](#run)
-- [Contribute](#contribute)
-- [Acknowledgements](#acknowledgements)
 
 # Introduction
 `The Motivation.` BLAST (Big Lightning Automated Simulation Tool) is a Modeling and Simulation (M&S) framework designed specifically for the Lightning Network. The Lightning Network is a second layer protocol built on top of the Bitcoin network to allow for faster and cheaper transactions. It uses payment channels to allow smaller transactions to be safely and efficiently routed without having to commit all the transactions to the base layer blockchain. BLAST revolutionizes the testing and analysis of Lightning Network operations with its fully automated, large-scale simulation capabilities based on real Lightning node implementations. With BLAST, users can effortlessly create highly customized test networks and define a sequence of ordered events to be executed within the simulation. Once the simulation is complete, BLAST provides comprehensive statistics and data for in-depth analysis of the simulated events.
