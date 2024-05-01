@@ -258,6 +258,7 @@ impl Blast {
     async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), String> {
         match self.blast_model_interface.start_nodes(model, num_nodes).await {
             Ok(s) => {
+                // TODO: need to append this data to simln_json in case there are multiple models starting nodes
                 self.simln_json = Some(s);
                 Ok(())
             },
