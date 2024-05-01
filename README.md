@@ -85,9 +85,3 @@ git clone git@github.com:bjohnson5/blast.git
 ```bash
 ./stop_bitcoind.sh
 ```
-
-# Contribute
-Coming soon...
-
-# Acknowledgements
-BLAST is under active development by [J12 Solutions](https://j12solutions.com/) and supported by [OpenSats](https://opensats.org/)

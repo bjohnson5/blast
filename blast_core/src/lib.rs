@@ -33,7 +33,7 @@ pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
 pub struct Blast {
     blast_model_interface: BlastModelInterface,
     simln: Option<Simulation>,
-    simln_json: Option<String>,
+    pub simln_json: Option<String>,
     bitcoin_rpc: Option<Client>
 }
 

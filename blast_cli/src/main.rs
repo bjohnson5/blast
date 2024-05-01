@@ -36,24 +36,20 @@ async fn main() {
     // -------------------------------------------------------------------------------------------------------------------------------
 
     // TODO: Add a call to list all nodes so that the user can choose which node name to use in these calls
-
-    match blast.get_pub_key(String::from("blast-0000")).await {
-        Ok(s) => {
-            println!("PubKey Node 0000: {}", s);
-        },
-        Err(e) => {
-            println!("{}", format!("Unable to get pub key: {}", e));
+    let json: serde_json::Value = serde_json::from_str(&blast.simln_json.clone().unwrap()).expect("JSON was not well-formatted");
+    if let Some(nodes) = json["nodes"].as_array() {
+        for n in nodes {
+            let node_id = String::from(n.as_object().unwrap()["id"].as_str().unwrap());
+            match blast.get_pub_key(node_id.clone()).await {
+                Ok(s) => {
+                    println!("PubKey Node {}: {}", node_id, s);
+                },
+                Err(e) => {
+                    println!("{}", format!("Unable to get pub key: {}", e));
+                }
+            }
         }
-    }
-
-    match blast.get_pub_key(String::from("blast-0001")).await {
-        Ok(s) => {
-            println!("PubKey Node 0001: {}", s);
-        },
-        Err(e) => {
-            println!("{}", format!("Unable to get pub key: {}", e));
-        }
-    }
+    };
 
     match blast.list_peers(String::from("blast-0000")).await {
         Ok(s) => {

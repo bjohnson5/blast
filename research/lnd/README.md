@@ -187,3 +187,31 @@ And we can see that the `scrypt.Key` functions only allocates 1024MB while start
 ![](visuals/100nodes_allocs_sharedwallet.png)
 
 ## TEST CASE 14 - 100 `lnd` instances started with the `blast_lnd` model
+Obviously all the nodes in the simulation cannot share one wallet, because their balances would all be the same and we need to be able to test transactions between these nodes. So in order to limit the memory requirements but have separate wallets, we can remove the need for `script.Key` and use a much simpler and more efficient key derivation process. Instead of calling `script.key` we use the password padded with 0's as the key:
+
+```
+var result [32]byte
+x := len(*password)
+copy(result[:x], *password)
+for i := x; i < len(result); i++ {
+    result[i] = 0
+}
+```
+
+This is very insecure and would not be advised on a mainnet node, but for simulation purposes it allows nodes to create a wallet without using much memory and it is still a valid key that can be used in the simulation.
+
+We can now start up 100 simulation nodes and see that the memory and cpu usage is very low. Here is a screen shot of 100 running nodes along with their pubkey and the system monitor:
+
+![](visuals/100nodes_blast_lnd.png)
+
+These are complete `lnd` nodes that are up and running and can be connected to by an RPC client to open channels, make payments, etc...
+
+We can see that the in use memory chart looks very similar to [Test Case 10](#test-case-10---100-lnd-instances-with-no-caching-and-using-neutrino) but lowers the startup memory requirements observed in [Test Case 11](#test-case-11---100-lnd-instances-with--alloc_space-flag-create-wallet) and [Test Case 12](#test-case-12---100-lnd-instances-with--alloc_space-flag-open-existing-wallet). In addition, each of these nodes has its own wallet and can operate individually, unlike [Test Case 13](#test-case-13---100-lnd-instances-with--alloc_space-flag-shared-wallet).
+
+![](visuals/test_case_14_pie_chart.png)
+
+## Docker vs BLAST
+Using docker to run multiple nodes is a better way to test with the official and complete `lnd` software, however that approach will use more resources. We can see that when running 100 nodes with `blast` the CPU and memory usage is lower than running only 30 `lnd` docker containers.
+
+![](visuals/30nodes_docker.png)
+![](visuals/100nodes_blast.png)

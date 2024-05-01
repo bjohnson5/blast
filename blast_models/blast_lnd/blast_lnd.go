@@ -241,7 +241,7 @@ func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 	server := grpc.NewServer()
 	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd})
 
-	address := "localhost:50051"
+	address := "localhost:5050"
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		blast_lnd_log("Failed to listen: " + err.Error())
