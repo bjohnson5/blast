@@ -1,18 +1,22 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::sleep;
 use std::collections::HashMap;
 use std::env;
 use std::process::{Command, Child};
-use std::error::Error;
+use std::error::Error as stdError;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::fs;
+use std::thread;
+use std::time::Duration;
 
+use anyhow::Error;
 use tonic::transport::Channel;
 use serde::Deserialize;
+use tokio::sync::mpsc::Receiver;
 
+use crate::blast_event_manager::BlastEvent;
 use blast_proto::blast_rpc_client::BlastRpcClient;
 use crate::blast_proto::*;
 
@@ -35,20 +39,48 @@ struct BlastModel {
     config: ModelConfig
 }
 
-/// The BlastModelInterface struct is the public interface that allows models to be controlled.
+/// The BlastModelManager struct is the public interface that allows models to be controlled.
 #[derive(Clone)]
-pub struct BlastModelInterface {
+pub struct BlastModelManager {
     models: HashMap<String, BlastModel>
 }
 
-impl BlastModelInterface {
-    /// Create a new BlastModelInterface by searching the models directory and parsing all model.json files that are found.
+impl BlastModelManager {
+    /// Create a new BlastModelManager by searching the models directory and parsing all model.json files that are found.
     pub fn new() -> Self {
-        let blast_model_interface = BlastModelInterface {
+        let blast_model_manager = BlastModelManager {
             models: parse_models(),
         };
 
-        blast_model_interface
+        blast_model_manager
+    }
+
+    /// Process events sent from the event thread and control the nodes on the network.
+    pub async fn process_events(&mut self, mut receiver: Receiver<BlastEvent>) -> Result<(), Error> {
+        loop {
+            let simulation_event = receiver.recv().await;
+            if let Some(event) = simulation_event {
+                match event {
+                    BlastEvent::StartNodeEvent(_) => {
+                        log::info!("BlastModelManager running event Start");
+                    },
+                    BlastEvent::StopNodeEvent(_) => {
+                        log::info!("BlastModelManager running event Stop");
+                    },
+                    BlastEvent::OpenChannelEvent(_, _, _, _) => {
+                        log::info!("BlastModelManager running event Open");
+                    },
+                    BlastEvent::CloseChannelEvent(_, _) => {
+                        log::info!("BlastModelManager running event Close");
+                    },
+                    BlastEvent::NoEvent => {
+                        log::info!("BlastModelManager running event No");
+                    }
+                }
+            } else {
+                return Ok(())
+            }
+        }
     }
 
     /// Start a model by name and wait for the RPC connection to be made.
@@ -89,7 +121,7 @@ impl BlastModelInterface {
                     if !running.load(Ordering::SeqCst) {
                         return Err(String::from("Could not connect to model"));
                     }
-                    sleep(std::time::Duration::from_secs(1));
+                    thread::sleep(Duration::from_secs(1));
                 }
             }
         }
@@ -454,7 +486,7 @@ fn check_for_model(dir_path: &Path, current_depth: usize, model_map: &mut HashMa
 }
 
 /// Helper function for parse_models.
-fn read_model_from_file<P: AsRef<Path>>(path: P) -> Result<ModelConfig, Box<dyn Error>> {
+fn read_model_from_file<P: AsRef<Path>>(path: P) -> Result<ModelConfig, Box<dyn stdError>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let u = serde_json::from_reader(reader)?;

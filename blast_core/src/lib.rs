@@ -1,152 +1,197 @@
-
 use std::process::Child;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::path::PathBuf;
-use std::{thread, time};
+use std::time::Duration;
+use std::thread;
 
 use bitcoincore_rpc::Auth;
 use bitcoincore_rpc::RpcApi;
 use simple_logger::SimpleLogger;
 use log::LevelFilter;
-use anyhow::anyhow;
-use bitcoin::secp256k1::PublicKey;
-use tokio::sync::Mutex;
+use anyhow::Error;
 use bitcoincore_rpc::Client;
+use tokio::task::JoinSet;
+use tokio::sync::mpsc;
 
-use sim_lib::ActivityDefinition;
-use sim_lib::Simulation;
-use sim_lib::LightningNode;
-use sim_lib::SimParams;
-use sim_lib::*;
-use sim_lib::lnd::*;
-use sim_lib::cln::*;
-
-use blast_model_interface::BlastModelInterface;
-
-pub const EXPECTED_PAYMENT_AMOUNT: u64 = 3_800_000;
-pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
+mod blast_model_manager;
+use crate::blast_model_manager::*;
+mod blast_event_manager;
+use crate::blast_event_manager::*;
+mod blast_simln_manager;
+use crate::blast_simln_manager::*;
 
 /// The Blast struct is the main public interface that can be used to run a simulation.
 pub struct Blast {
-    blast_model_interface: BlastModelInterface,
-    simln: Option<Simulation>,
-    pub simln_json: Option<String>,
-    bitcoin_rpc: Option<Client>
+    blast_model_manager: BlastModelManager,
+    blast_event_manager: BlastEventManager,
+    blast_simln_manager: BlastSimLnManager,
+    network: Option<BlastNetwork>,
+    bitcoin_rpc: Option<Client>,
 }
 
-impl Clone for Blast {
-    fn clone(&self) -> Self {
-        Self {
-            blast_model_interface: self.blast_model_interface.clone(),
-            simln: self.simln.clone(),
-            simln_json: self.simln_json.clone(),
-            bitcoin_rpc: match Client::new("http://127.0.0.1:18443/", Auth::UserPass(String::from("user"), String::from("pass"))) {
-                Ok(c) => {
-                    Some(c)
-                },
-                Err(_) => {
-                    None
-                }
-            }
-        }
-    }
+/// The BlastNetwork describes how many nodes are run for each model.
+#[derive(Clone)]
+pub struct BlastNetwork {
+    name: String,
+    model_map: HashMap<String, i32>
 }
 
 impl Blast {
-    /// Create a new Blast object with a new BlastModelInterface.
-    pub fn new() -> Result<Self, String> {
-        // Connect to bitcoind RPC server
-        let client = Client::new("http://127.0.0.1:18443/", Auth::UserPass(String::from("user"), String::from("pass"))).map_err(|e| e.to_string())?;
-
-        let blast = Blast {
-            blast_model_interface: BlastModelInterface::new(),
-            simln: None,
-            simln_json: None,
-            bitcoin_rpc: Some(client)
-        };
-
-        Ok(blast)
-    }
-
-    /// Load the simulation. This will start the models and nodes, fund them with initial balances, open initial channels, etc.
-    pub async fn load_simulation(&mut self, running: Arc<AtomicBool>) -> Result<Child, String> {
-        // TODO: load the configured network and get rid of hard coded blast_lnd and number of nodes
-        // TODO: will need to start all the models that are needed for this simulation
-        // TODO: will need to start the correct number of nodes for each model
-        let child = self.start_model(String::from("blast_lnd"), running.clone()).await?;
-    
-        match self.start_nodes(String::from("blast_lnd"), 2).await {
-            Ok(_) => {},
-            Err(e) => {
-                return Err(format!("Unable to start nodes: {}", e));
-            }
-        }
-
-        // TODO: use defined payment activity for simln -- add payment json to the simln_json object
-
-        match self.setup_simln().await {
-            Ok(s) => {
-                self.simln = Some(s);
-            },
-            Err(e) => {
-                return Err(format!("Failed to setup simln: {:?}", e));
-            }
-        };
-
-        Ok(child)
-    }
-
-    /// Unload the simulation. This will shutdown the models and nodes.
-    pub async fn unload_simulation(&mut self) -> Result<(), String> {
-        self.stop_model(String::from("blast_lnd")).await
-    }
-
-    /// Start the simulation. This will start the simulation events and the simln transaction generation.
-    pub async fn start_simulation(&mut self) -> anyhow::Result<()> {
+    /// Create a new Blast object with a new BlastModelManager.
+    pub fn new() -> Self {
         // Set up the logger
         SimpleLogger::new()
         .with_level(LevelFilter::Debug)
         .init()
         .unwrap();
 
-        log::info!("Running BLAST Simulation");
+        let blast = Blast {
+            blast_model_manager: BlastModelManager::new(),
+            blast_event_manager: BlastEventManager::new(),
+            blast_simln_manager: BlastSimLnManager::new(),
+            network: None,
+            bitcoin_rpc: match Client::new("http://127.0.0.1:18443/", Auth::UserPass(String::from("user"), String::from("pass"))) {
+                Ok(c) => Some(c),
+                Err(_) => None
+            }
+        };
 
-        // TODO: start the event thread
-        
-        // Start the simln thread
-        match &self.simln {
-            Some(s) => {
-                s.run().await?;
-            },
-            None => {
-                return Err(anyhow!("Simln not setup. Call set_simln before running the simulation"));
+        blast
+    }
+
+    /// Create a new network from scratch.
+    pub fn create_network(&mut self, name: &str, model_map: HashMap<String, i32>) {
+        log::info!("Creating BLAST Network");
+        self.network = Some(BlastNetwork{name: String::from(name), model_map: model_map});
+    }
+
+    /// Start the simulation network. This will start the models and nodes, fund them with initial balances, open initial channels, etc.
+    pub async fn start_network(&mut self, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
+        log::info!("Starting BLAST Network");
+
+        let net = match &self.network {
+            Some(n) => n,
+            None => return Err(format!("No network found")),
+        };
+
+        let mut child_list: Vec<Child> = Vec::new();
+        for (key, value) in net.model_map.clone().into_iter() {
+            let child = self.start_model(key.clone(), running.clone()).await?;
+            child_list.push(child);
+            match self.start_nodes(key.clone(), value).await {
+                Ok(_) => {},
+                Err(e) => return Err(format!("Unable to start nodes: {}", e)),
             }
         }
 
+        Ok(child_list)
+    }
+
+    /// Shutdown the simulation network. This will shutdown the models and nodes.
+    pub async fn stop_network(&mut self) -> Result<(), String> {
+        log::info!("Stopping BLAST Network");
+
+        let net = match &self.network {
+            Some(n) => n,
+            None => return Err(format!("No network found")),
+        };
+
+        for (key, _) in net.model_map.clone().into_iter() {
+            self.stop_model(key).await?
+        }
+
         Ok(())
+    }
+
+    /// Gets the simulation ready to run.
+    pub async fn finalize_simulation(&mut self) -> Result<(), String> {
+        log::info!("Finalizing BLAST Simulation");
+
+        match self.blast_simln_manager.setup_simln().await {
+            Ok(_) => {},
+            Err(e) => return Err(format!("Failed to setup simln: {:?}", e)),
+        };
+
+        Ok(())
+    }
+
+    /// Start the simulation. This will start the simulation events and the simln transaction generation.
+    pub async fn start_simulation(&mut self) -> Result<JoinSet<Result<(),Error>>, String> {
+        let net = match &self.network {
+            Some(n) => n,
+            None => return Err(format!("No network found")),
+        };
+
+        log::info!("Starting BLAST Simulation for {}", net.name);
+
+        // Wait for all node announcements to take place (lnd - trickledelay)
+        thread::sleep(Duration::from_secs(10));
+
+        let mut sim_tasks = JoinSet::new();
+        let simln_man = self.blast_simln_manager.clone();
+        let mut event_man = self.blast_event_manager.clone();
+        let mut model_man = self.blast_model_manager.clone();
+        let (sender, receiver) = mpsc::channel(1);
+
+        sim_tasks.spawn(async move {
+            // Start the simln thread
+            simln_man.start().await
+        });
+
+        sim_tasks.spawn(async move {
+            // Start the event thread
+            event_man.start(sender).await
+        });
+
+        sim_tasks.spawn(async move {
+            // Start the model manager thread
+            model_man.process_events(receiver).await
+        });
+
+        Ok(sim_tasks)
     }
 
     /// Stop the simulation. This will stop the simulation events and the simln transaction generation.
     pub fn stop_simulation(&mut self) {
         log::info!("Stopping BLAST Simulation");
 
-        // TODO: stop the event thread
+        // Stop the event thread
+        self.blast_event_manager.stop();
 
-        // Stop simln thread
-        match &self.simln {
-            Some(s) => {
-                s.shutdown();
-            },
-            None => {}
-        };
+        // Stop the simln thread
+        self.blast_simln_manager.stop();
+    }
+
+    /// Load a simulation. This will load a saved simulation network (nodes, channels, balance) and load events/activity.
+    pub fn load(&mut self) {
+        log::info!("Loading BLAST Simulation");
+    }
+
+    /// Save a simulation. This will save off the current simulation network (nodes, channels, balances) and save events/activity.
+    pub fn save(&mut self) {
+        log::info!("Saving BLAST Simulation");
+    }
+
+    /// Create payment activity for the simulation.
+    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
+        self.blast_simln_manager.add_activity(source, destination, start_secs, count, interval_secs, amount_msat);
+    }
+
+    /// Create an event for the simulation.
+    pub fn add_event(&mut self, frame_num: u64, event: &str, args: Option<Vec<String>>) -> Result<(), String> {
+        self.blast_event_manager.add_event(frame_num, event, args)
+    }
+
+    /// Get all the nodes.
+    pub fn get_nodes(&self) -> Vec<String> {
+        self.blast_simln_manager.get_nodes()
     }
 
     /// Get the public key of a node.
     pub async fn get_pub_key(&mut self, node_id: String) -> Result<String, String> {
-        match self.blast_model_interface.get_pub_key(node_id).await {
+        match self.blast_model_manager.get_pub_key(node_id).await {
             Ok(s) => Ok(s),
             Err(e) => Err(format!("Error getting pub key: {}", e))
         }
@@ -154,7 +199,7 @@ impl Blast {
 
     /// Get the peers of a node.
     pub async fn list_peers(&mut self, node_id: String) -> Result<String, String> {
-        match self.blast_model_interface.list_peers(node_id).await {
+        match self.blast_model_manager.list_peers(node_id).await {
             Ok(s) => Ok(s),
             Err(e) => Err(format!("Error getting peers: {}", e))
         }
@@ -162,7 +207,7 @@ impl Blast {
 
     /// Show this nodes on-chain balance.
     pub async fn wallet_balance(&mut self, node_id: String) -> Result<String, String> {
-        match self.blast_model_interface.wallet_balance(node_id).await {
+        match self.blast_model_manager.wallet_balance(node_id).await {
             Ok(s) => Ok(s),
             Err(e) => Err(format!("Error getting wallet balance: {}", e))
         }
@@ -170,7 +215,7 @@ impl Blast {
 
     /// Show this nodes off-chain balance.
     pub async fn channel_balance(&mut self, node_id: String) -> Result<String, String> {
-        match self.blast_model_interface.channel_balance(node_id).await {
+        match self.blast_model_manager.channel_balance(node_id).await {
             Ok(s) => Ok(s),
             Err(e) => Err(format!("Error getting channel balance: {}", e))
         }
@@ -178,22 +223,20 @@ impl Blast {
 
     /// View open channels on this node.
     pub async fn list_channels(&mut self, node_id: String) -> Result<String, String> {
-        match self.blast_model_interface.list_channels(node_id).await {
+        match self.blast_model_manager.list_channels(node_id).await {
             Ok(s) => Ok(s),
             Err(e) => Err(format!("Error getting channels: {}", e))
         }
     }
 
-    /// Open a channel.
-    pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64) -> Result<(), String> {
-        match self.blast_model_interface.open_channel(node1_id, node2_id, amount, push_amount).await {
+    /// Open a channel and optionally mine blocks to confirm the channel.
+    pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64, confirm: bool) -> Result<(), String> {
+        match self.blast_model_manager.open_channel(node1_id, node2_id, amount, push_amount).await {
             Ok(_) => {
-                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread
-                thread::sleep(time::Duration::from_secs(10));
-                let mine_address = self.bitcoin_rpc.as_mut().unwrap().get_new_address(None, Some(bitcoincore_rpc::bitcoincore_rpc_json::AddressType::P2shSegwit))
-                .unwrap().require_network(bitcoincore_rpc::bitcoin::Network::Regtest)
-                .map_err(|e|e.to_string())?;
-                let _ = self.bitcoin_rpc.as_mut().unwrap().generate_to_address(100, &mine_address).map_err(|e| e.to_string())?;
+                if confirm {
+                    thread::sleep(Duration::from_secs(5));
+                    mine_blocks(&mut self.bitcoin_rpc, 100)?;
+                }
                 Ok(())
             },
             Err(e) => Err(format!("Error opening a channel: {}", e))
@@ -202,7 +245,7 @@ impl Blast {
 
     /// Close a channel.
     pub async fn close_channel(&mut self) -> Result<(), String> {
-        match self.blast_model_interface.close_channel().await {
+        match self.blast_model_manager.close_channel().await {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Error closing a channel: {}", e))
         }
@@ -210,7 +253,7 @@ impl Blast {
 
     /// Add a peer.
     pub async fn connect_peer(&mut self, node1_id: String, node2_id: String) -> Result<(), String> {
-        match self.blast_model_interface.connect_peer(node1_id, node2_id).await {
+        match self.blast_model_manager.connect_peer(node1_id, node2_id).await {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Error connecting to peer: {}", e))
         }
@@ -218,26 +261,24 @@ impl Blast {
 
     /// Remove a peer.
     pub async fn disconnect_peer(&mut self, node1_id: String, node2_id: String) -> Result<(), String> {
-        match self.blast_model_interface.disconnect_peer(node1_id, node2_id).await {
+        match self.blast_model_manager.disconnect_peer(node1_id, node2_id).await {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Error disconnecting from peer: {}", e))
         }
     }
 
-    /// Send funds to a node on-chain.
-    pub async fn fund_node(&mut self, node_id: String) -> Result<String, String> {
-        match self.blast_model_interface.get_btc_address(node_id).await {
+    /// Send funds to a node on-chain and optionally mines blocks to confirm that payment.
+    pub async fn fund_node(&mut self, node_id: String, confirm: bool) -> Result<String, String> {
+        match self.blast_model_manager.get_btc_address(node_id).await {
             Ok(a) => {
                 let address = bitcoincore_rpc::bitcoin::Address::from_str(&a).map_err(|e|e.to_string())?
-               .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
+                .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
                 let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, bitcoincore_rpc::bitcoin::Amount::ONE_BTC, None, None, None, None, None, None)
                 .map_err(|e| e.to_string())?;
 
-                // TODO: remove this... mine new blocks on a regular timeline, maybe during the event thread
-                let mine_address = self.bitcoin_rpc.as_mut().unwrap().get_new_address(None, Some(bitcoincore_rpc::bitcoincore_rpc_json::AddressType::P2shSegwit))
-                .unwrap().require_network(bitcoincore_rpc::bitcoin::Network::Regtest)
-                .map_err(|e|e.to_string())?;
-                let _ = self.bitcoin_rpc.as_mut().unwrap().generate_to_address(100, &mine_address).map_err(|e| e.to_string())?;
+                if confirm {
+                    mine_blocks(&mut self.bitcoin_rpc, 50)?;
+                }
                 Ok(format!("{}", txid))
             },
             Err(e) => Err(format!("Error getting address: {}", e))
@@ -246,125 +287,33 @@ impl Blast {
 
     /// Start a model by name and wait for the RPC connection to be made.
     async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Result<Child, String> {
-        self.blast_model_interface.start_model(model, running).await
+        self.blast_model_manager.start_model(model, running).await
     }
 
     /// Stop a model by name.
     async fn stop_model(&mut self, model: String) -> Result<(), String>{
-        self.blast_model_interface.stop_model(model).await
+        self.blast_model_manager.stop_model(model).await
     }
     
     /// Start a given number of nodes for the given model name.
     async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), String> {
-        match self.blast_model_interface.start_nodes(model, num_nodes).await {
-            Ok(s) => {
-                // TODO: need to append this data to simln_json in case there are multiple models starting nodes
-                self.simln_json = Some(s);
-                Ok(())
-            },
+        match self.blast_model_manager.start_nodes(model, num_nodes).await {
+            Ok(s) => self.blast_simln_manager.add_nodes(s),
             Err(e) => Err(format!("Error starting nodes: {}", e))
         }
     }
+}
 
-    /// Create a simln simulation from the json data blast gets from each model in the sim.
-    async fn setup_simln(&self) -> Result<Simulation, anyhow::Error> {
-        let SimParams { nodes, activity } = 
-        serde_json::from_str(&self.simln_json.as_ref().unwrap())
-        .map_err(|e| anyhow!("Could not deserialize node connection data or activity description from simulation file (line {}, col {}).", e.line(), e.column()))?;
+/// Mine new blocks.
+pub fn mine_blocks(rpc: &mut Option<Client>, num_blocks: u64) -> Result<(), String> {
+    let client = match rpc {
+        Some(c) => c,
+        None => return Err(format!("No bitcoind client found, unable to mine blocks."))
+    };
 
-        let mut clients: HashMap<PublicKey, Arc<Mutex<dyn LightningNode>>> = HashMap::new();
-        let mut pk_node_map = HashMap::new();
-        let mut alias_node_map = HashMap::new();
-        for connection in nodes {
-            let node: Arc<Mutex<dyn LightningNode>> = match connection {
-                NodeConnection::LND(c) => {
-                    Arc::new(Mutex::new(LndNode::new(c).await?))
-                },
-                NodeConnection::CLN(c) => Arc::new(Mutex::new(ClnNode::new(c).await?)),
-            };
-
-            let node_info = node.lock().await.get_info().clone();
-
-            if alias_node_map.contains_key(&node_info.alias) {
-                anyhow::bail!(LightningError::ValidationError(format!(
-                    "duplicated node: {}.",
-                    node_info.alias
-                )));
-            }
-
-            clients.insert(node_info.pubkey, node);
-            pk_node_map.insert(node_info.pubkey, node_info.clone());
-            alias_node_map.insert(node_info.alias.clone(), node_info);
-        }
-
-        let mut validated_activities = vec![];
-        for act in activity.into_iter() {
-            let source = if let Some(source) = match &act.source {
-                NodeId::PublicKey(pk) => pk_node_map.get(pk),
-                NodeId::Alias(a) => alias_node_map.get(a),
-            } {
-                source.clone()
-            } else {
-                anyhow::bail!(LightningError::ValidationError(format!(
-                    "activity source {} not found in nodes.",
-                    act.source
-                )));
-            };
-
-            let destination = match &act.destination {
-                NodeId::Alias(a) => {
-                    if let Some(info) = alias_node_map.get(a) {
-                        info.clone()
-                    } else {
-                        anyhow::bail!(LightningError::ValidationError(format!(
-                            "unknown activity destination: {}.",
-                            act.destination
-                        )));
-                    }
-                },
-                NodeId::PublicKey(pk) => {
-                    if let Some(info) = pk_node_map.get(pk) {
-                        info.clone()
-                    } else {
-                        clients
-                            .get(&source.pubkey)
-                            .unwrap()
-                            .lock()
-                            .await
-                            .get_node_info(pk)
-                            .await
-                            .map_err(|_| {
-                                LightningError::ValidationError(format!(
-                                    "Destination node unknown or invalid: {}.",
-                                    pk,
-                                ))
-                            })?
-                    }
-                },
-            };
-
-            validated_activities.push(ActivityDefinition {
-                source,
-                destination,
-                start_secs: act.start_secs,
-                count: act.count,
-                interval_secs: act.interval_secs,
-                amount_msat: act.amount_msat,
-            });
-        }
-
-        let sim = Simulation::new(
-            clients,
-            validated_activities,
-            None,
-            EXPECTED_PAYMENT_AMOUNT,
-            ACTIVITY_MULTIPLIER,
-            Some(WriteResults {
-                // TODO: remove hard coded values
-                results_dir: PathBuf::from(String::from("/home/simln_results")),
-                batch_size: 1,
-            })
-        );
-        Ok(sim)
-    }
+    let mine_address = client.get_new_address(None, Some(bitcoincore_rpc::bitcoincore_rpc_json::AddressType::P2shSegwit))
+    .unwrap().require_network(bitcoincore_rpc::bitcoin::Network::Regtest)
+    .map_err(|e|e.to_string())?;
+    let _ = client.generate_to_address(num_blocks, &mine_address).map_err(|e| e.to_string())?;
+    Ok(())
 }

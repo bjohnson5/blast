@@ -39,6 +39,7 @@ noseedbackup=true
 no-macaroons=true
 accept-keysend=1
 debuglevel=error
+trickledelay=1000
 
 [bitcoin]
 bitcoin.active=1

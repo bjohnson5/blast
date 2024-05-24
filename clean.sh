@@ -25,17 +25,8 @@ cargo clean
 rm Cargo.lock
 cd -
 
-# Clean the model interface
-cd blast_model_interface
-cargo clean
-rm Cargo.lock
-cd -
-
 # Clean the Web UI
 cd blast_web
 cargo clean
 rm Cargo.lock
 cd -
-
-
-

@@ -29,7 +29,6 @@ BLAST development will all take place in this repository and will be broken down
 # Repo Tour
 - `blast_cli` - The CLI for running blast
 - `blast_core`- The core simulation library
-- `blast_model_interface` - The interface between the node models and core library
 - `blast_models` - The node models
 - `blast_proto` - The BLAST RPC protocol definition
 - `blast_web` - The web interface for running blast
