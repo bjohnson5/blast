@@ -43,7 +43,7 @@ impl Blast {
     pub fn new() -> Self {
         // Set up the logger
         SimpleLogger::new()
-        .with_level(LevelFilter::Debug)
+        .with_level(LevelFilter::Info)
         .init()
         .unwrap();
 
@@ -230,8 +230,8 @@ impl Blast {
     }
 
     /// Open a channel and optionally mine blocks to confirm the channel.
-    pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64, confirm: bool) -> Result<(), String> {
-        match self.blast_model_manager.open_channel(node1_id, node2_id, amount, push_amount).await {
+    pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64, chan_id: i64, confirm: bool) -> Result<(), String> {
+        match self.blast_model_manager.open_channel(node1_id, node2_id, amount, push_amount, chan_id).await {
             Ok(_) => {
                 if confirm {
                     thread::sleep(Duration::from_secs(5));
@@ -244,8 +244,8 @@ impl Blast {
     }
 
     /// Close a channel.
-    pub async fn close_channel(&mut self) -> Result<(), String> {
-        match self.blast_model_manager.close_channel().await {
+    pub async fn close_channel(&mut self, source_id: String, chan_id: i64) -> Result<(), String> {
+        match self.blast_model_manager.close_channel(source_id, chan_id).await {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Error closing a channel: {}", e))
         }

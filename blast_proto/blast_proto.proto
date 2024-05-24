@@ -80,6 +80,7 @@ message BlastOpenChannelRequest {
     string peer_pub_key = 2;
     int64 amount = 3;
     int64 push_amout = 4;
+    int64 channel_id = 5;
 }
 
 message BlastOpenChannelResponse {
@@ -88,6 +89,7 @@ message BlastOpenChannelResponse {
 
 message BlastCloseChannelRequest {
     string node = 1;
+    int64 channel_id = 2;
 }
 
 message BlastCloseChannelResponse {

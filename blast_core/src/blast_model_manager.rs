@@ -62,16 +62,30 @@ impl BlastModelManager {
             if let Some(event) = simulation_event {
                 match event {
                     BlastEvent::StartNodeEvent(_) => {
-                        log::info!("BlastModelManager running event Start");
+                        // TODO: implement start node event
+                        log::info!("BlastModelManager running event StartNode");
                     },
                     BlastEvent::StopNodeEvent(_) => {
-                        log::info!("BlastModelManager running event Stop");
+                        // TODO: implement stop node event
+                        log::info!("BlastModelManager running event StopNode");
                     },
-                    BlastEvent::OpenChannelEvent(_, _, _, _) => {
-                        log::info!("BlastModelManager running event Open");
+                    BlastEvent::OpenChannelEvent(source, dest, amount, push, chan_id) => {
+                        log::info!("BlastModelManager running event OpenChannel");
+                        match self.open_channel(source, dest, amount, push, chan_id).await {
+                            Ok(_) => {},
+                            Err(e) => {
+                                log::error!("BlastModelManager error opening a channel: {}", e);
+                            }
+                        }
                     },
-                    BlastEvent::CloseChannelEvent(_, _) => {
-                        log::info!("BlastModelManager running event Close");
+                    BlastEvent::CloseChannelEvent(source, chan_id) => {
+                        log::info!("BlastModelManager running event CloseChannel");
+                        match self.close_channel(source, chan_id).await {
+                            Ok(_) => {},
+                            Err(e) => {
+                                log::error!("BlastModelManager error closing a channel: {}", e);
+                            }
+                        }
                     },
                     BlastEvent::NoEvent => {
                         log::info!("BlastModelManager running event No");
@@ -277,17 +291,18 @@ impl BlastModelManager {
         Ok(response.get_ref().channels.clone())
     }
 
-    pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64) -> Result<(), String> {
-        let pub_key = self.get_pub_key(node2_id.clone()).await?;
+    pub async fn open_channel(&mut self, source_id: String, dest_id: String, amount: i64, push_amount: i64, chan_id: i64) -> Result<(), String> {
+        let pub_key = self.get_pub_key(dest_id.clone()).await?;
 
         // TODO: look up the node_id and find which model it belongs too
         let client = self.get_model_client(String::from("blast_lnd"))?;
 
         let request = tonic::Request::new(BlastOpenChannelRequest {
-            node: node1_id,
+            node: source_id,
             peer_pub_key: pub_key,
             amount: amount,
-            push_amout: push_amount
+            push_amout: push_amount,
+            channel_id: chan_id
         });
 
         let response = match client.open_channel(request).await {
@@ -304,12 +319,13 @@ impl BlastModelManager {
         }
     }
 
-    pub async fn close_channel(&mut self) -> Result<(), String> {
+    pub async fn close_channel(&mut self, source_id: String, chan_id: i64) -> Result<(), String> {
         // TODO: look up the node_id and find which model it belongs too
         let client = self.get_model_client(String::from("blast_lnd"))?;
 
         let request = tonic::Request::new(BlastCloseChannelRequest {
-            node: String::from(""),
+            node: source_id,
+            channel_id: chan_id
         });
 
         let response = match client.close_channel(request).await {

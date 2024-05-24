@@ -12,7 +12,8 @@ import (
 
 type BlastRpcServer struct {
 	pb.UnimplementedBlastRpcServer
-	blast_lnd *BlastLnd
+	blast_lnd     *BlastLnd
+	open_channels map[int]*lnrpc.ChannelPoint
 }
 
 func (s *BlastRpcServer) StartNodes(ctx context.Context, request *pb.BlastStartRequest) (*pb.BlastStartResponse, error) {
@@ -153,7 +154,52 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 			PushSat:            request.PushAmout,
 		}
 		ctx := context.Background()
-		_, err := client.OpenChannel(ctx, req)
+		status_client, err := client.OpenChannel(ctx, req)
+		if err != nil {
+			err_val = err
+		} else {
+			err_val = nil
+			response.Success = true
+			go func() {
+				for {
+					rpcUpdate, err := status_client.Recv()
+					if err != nil {
+						return
+					}
+
+					switch rpcUpdate.Update.(type) {
+					case *lnrpc.OpenStatusUpdate_ChanPending:
+					case *lnrpc.OpenStatusUpdate_ChanOpen:
+						s.open_channels[int(request.ChannelId)] = rpcUpdate.GetChanOpen().ChannelPoint
+						return
+					case *lnrpc.OpenStatusUpdate_PsbtFund:
+					}
+				}
+			}()
+		}
+	}
+
+	return response, err_val
+}
+
+func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastCloseChannelRequest) (*pb.BlastCloseChannelResponse, error) {
+	err_val := errors.New("could not find open channel")
+	response := &pb.BlastCloseChannelResponse{
+		Success: false,
+	}
+
+	var chan_point *lnrpc.ChannelPoint
+	if val, ok := s.open_channels[int(request.ChannelId)]; ok {
+		chan_point = val
+	} else {
+		return response, err_val
+	}
+
+	err_val = errors.New("could not find node connection")
+	if client, ok := s.blast_lnd.clients[request.Node]; ok {
+		req := &lnrpc.CloseChannelRequest{ChannelPoint: chan_point}
+		ctx := context.Background()
+		_, err := client.CloseChannel(ctx, req)
 		if err != nil {
 			err_val = err
 		} else {
@@ -163,14 +209,6 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 	}
 
 	return response, err_val
-}
-
-// TODO: implement this RPC function
-func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastCloseChannelRequest) (*pb.BlastCloseChannelResponse, error) {
-	response := &pb.BlastCloseChannelResponse{
-		Success: true,
-	}
-	return response, nil
 }
 
 func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastConnectRequest) (*pb.BlastConnectResponse, error) {

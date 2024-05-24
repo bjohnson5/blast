@@ -240,7 +240,7 @@ func ensure_directory_exists(filePath string) error {
 
 func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 	server := grpc.NewServer()
-	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd})
+	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd, open_channels: make(map[int]*lnrpc.ChannelPoint)})
 
 	address := "localhost:5050"
 	listener, err := net.Listen("tcp", address)

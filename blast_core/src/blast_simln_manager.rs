@@ -155,6 +155,7 @@ impl BlastSimLnManager {
 
     /// Run SimLn simulation
     pub async fn start(&self) -> Result<(), Error> {
+        log::info!("BlastSimlnManager starting simulation.");
         match &self.sim {
             Some(s) => {
                 s.run().await?;
@@ -166,6 +167,7 @@ impl BlastSimLnManager {
 
     /// Stop SimLn simulation
     pub fn stop(&self) {
+        log::info!("BlastSimlnManager stopping simulation.");
         match &self.sim {
             Some(s) => s.shutdown(),
             None => {}

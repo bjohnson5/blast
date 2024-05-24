@@ -99,7 +99,7 @@ impl BlastEventManager {
                 self.push_event(frame_num, blast_event);
                 Ok(())
             },
-            BlastEvent::OpenChannelEvent(_,_,_,_) => {
+            BlastEvent::OpenChannelEvent(_,_,_,_,_) => {
                 let a = self.validate_args(args, e)?;
                 let arg0 = a.get(0).unwrap().to_owned();
                 let arg1 = a.get(1).unwrap().to_owned();
@@ -111,14 +111,18 @@ impl BlastEventManager {
                     Ok(n) => n,
                     Err(e) => return Err(format!("Error parsing argument: {}", e))
                 };
-                let blast_event = BlastEvent::OpenChannelEvent(arg0, arg1, arg2, arg3);
+                let arg4 =  match a.get(4).unwrap().to_owned().parse::<i64>() {
+                    Ok(n) => n,
+                    Err(e) => return Err(format!("Error parsing argument: {}", e))
+                };
+                let blast_event = BlastEvent::OpenChannelEvent(arg0, arg1, arg2, arg3, arg4);
                 self.push_event(frame_num, blast_event);
                 Ok(())
             },
             BlastEvent::CloseChannelEvent(_,_) => {
                 let a = self.validate_args(args, e)?;
                 let arg0 = a.get(0).unwrap().to_owned();
-                let arg1 =  match a.get(1).unwrap().to_owned().parse::<u64>() {
+                let arg1 =  match a.get(1).unwrap().to_owned().parse::<i64>() {
                     Ok(n) => n,
                     Err(e) => return Err(format!("Error parsing argument: {}", e))
                 };
@@ -161,8 +165,8 @@ impl BlastEventManager {
 pub enum BlastEvent {
     StartNodeEvent(String),
     StopNodeEvent(String),
-    OpenChannelEvent(String, String, i64, i64),
-    CloseChannelEvent(String, u64),
+    OpenChannelEvent(String, String, i64, i64, i64),
+    CloseChannelEvent(String, i64),
     NoEvent
 }
 
@@ -171,7 +175,7 @@ impl fmt::Display for BlastEvent {
         match self {
             BlastEvent::StartNodeEvent(a) => write!(f, "StartNodeEvent: {}", a),
             BlastEvent::StopNodeEvent(a) => write!(f, "StopNodeEvent: {}", a),
-            BlastEvent::OpenChannelEvent(a, b, c, d) => write!(f, "OpenChannelEvent: {} {} {} {}", a, b, c, d),
+            BlastEvent::OpenChannelEvent(a, b, c, d, e) => write!(f, "OpenChannelEvent: {} {} {} {} {}", a, b, c, d, e),
             BlastEvent::CloseChannelEvent(a, b) => write!(f, "CloseChannelEvent: {} {}", a, b),
             BlastEvent::NoEvent => write!(f, "NoEvent")
         }
@@ -183,7 +187,7 @@ impl BlastEvent {
         match s {
             "StartNode" => BlastEvent::StartNodeEvent(String::from("")),
             "StopNode" => BlastEvent::StopNodeEvent(String::from("")),
-            "OpenChannel" => BlastEvent::OpenChannelEvent(String::from(""), String::from(""), 0, 0),
+            "OpenChannel" => BlastEvent::OpenChannelEvent(String::from(""), String::from(""), 0, 0, 0),
             "CloseChannel" => BlastEvent::CloseChannelEvent(String::from(""), 0),
             _ => BlastEvent::NoEvent
         }
@@ -193,7 +197,7 @@ impl BlastEvent {
         match self {
             BlastEvent::StartNodeEvent(_) => 1,
             BlastEvent::StopNodeEvent(_) => 1,
-            BlastEvent::OpenChannelEvent(_, _, _, _) => 4,
+            BlastEvent::OpenChannelEvent(_, _, _, _, _) => 5,
             BlastEvent::CloseChannelEvent(_, _) => 2,
             BlastEvent::NoEvent => 0
         }

@@ -51,7 +51,7 @@ async fn main() {
     };
 
     // Example operations that the blast cli will need to do -- will eventually be cleaned up -- testing purposes only right now
-    // TODO: add command line interface to let the user make these calls
+    // Add command line interface to let the user make these calls
     // -------------------------------------------------------------------------------------------------------------------------------
     
     for node_id in blast.get_nodes() {
@@ -216,7 +216,7 @@ async fn main() {
 
     println!("----------------------------------------------- OPEN CHANNEL -----------------------------------------------");
 
-    match blast.open_channel(String::from("blast-0000"), String::from("blast-0001"), 30000, 0, true).await {
+    match blast.open_channel(String::from("blast-0000"), String::from("blast-0001"), 30000, 0, 0, true).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to open channel: {}", e));
@@ -228,7 +228,7 @@ async fn main() {
             println!("Channels Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("{}", format!("Unable to list channels: {}", e));
         }
     }
 
@@ -237,7 +237,7 @@ async fn main() {
             println!("Channels Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("{}", format!("Unable to list channels: {}", e));
         }
     }
 
@@ -260,10 +260,6 @@ async fn main() {
     }
 
     blast.add_activity("blast-0000", "blast-0001", 0, None, 1, 2000);
-
-    // TODO: Add test call for close channel rpc
-    // TODO: Add a close channel event at a certain time
-    // TODO: Add an open channel event at a certain time
     
     let mut good_start = Vec::new();
     good_start.push(String::from("node1"));
@@ -283,7 +279,7 @@ async fn main() {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(15, "StartNode", Some(good_start.clone())) {
+    match blast.add_event(5, "StartNode", Some(good_start.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
@@ -301,7 +297,7 @@ async fn main() {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(15, "StopNode", Some(good_start.clone())) {
+    match blast.add_event(5, "StopNode", Some(good_start.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
@@ -310,11 +306,11 @@ async fn main() {
 
     let mut bad_open = Vec::new();
     bad_open.push(String::from("node1"));
-    let mut good_open = Vec::new();
-    good_open.push(String::from("node1"));
-    good_open.push(String::from("node2"));
-    good_open.push(String::from("5000"));
-    good_open.push(String::from("0"));
+    //let mut good_open = Vec::new();
+    //good_open.push(String::from("node1"));
+    //good_open.push(String::from("node2"));
+    //good_open.push(String::from("5000"));
+    //good_open.push(String::from("0"));
     let mut bad_open1 = Vec::new();
     bad_open1.push(String::from("node1"));
     bad_open1.push(String::from("node2"));
@@ -339,18 +335,18 @@ async fn main() {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(20, "OpenChannel", Some(good_open.clone())) {
-        Ok(_) => {},
-        Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
-        }
-    }
+    //match blast.add_event(20, "OpenChannel", Some(good_open.clone())) {
+    //    Ok(_) => {},
+    //    Err(e) => {
+    //        println!("{}", format!("Error adding event: {}", e));
+    //    }
+    //}
 
     let mut bad_close = Vec::new();
     bad_close.push(String::from("node1"));
     let mut good_close = Vec::new();
-    good_close.push(String::from("node1"));
-    good_close.push(String::from("8"));
+    good_close.push(String::from("blast-0000"));
+    good_close.push(String::from("0"));
     let mut bad_close1 = Vec::new();
     bad_close1.push(String::from("node1"));
     bad_close1.push(String::from("node2"));
@@ -373,7 +369,7 @@ async fn main() {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(20, "CloseChannel", Some(good_close.clone())) {
+    match blast.add_event(10, "CloseChannel", Some(good_close.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
@@ -409,6 +405,27 @@ async fn main() {
 
     // Stop the blast simulation
     blast.stop_simulation();
+
+    // --------------------------------------- Perform more queries of the network, reconfigure network, events, payment activity and then could run again ---------------------------------------------
+    // TODO: make this work. currently lnd shutsdown on Ctrlc so the RPC calls fail here. need to keep lnd alive until we call stop_network
+    match blast.list_channels(String::from("blast-0000")).await {
+        Ok(s) => {
+            println!("Channels Node 0000: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to list channels: {}", e));
+        }
+    }
+
+    match blast.list_peers(String::from("blast-0001")).await {
+        Ok(s) => {
+            println!("Peers Node 0001: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to list peers: {}", e));
+        }
+    }
+    // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     // Stop the models
     match blast.stop_network().await {
