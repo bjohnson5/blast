@@ -38,7 +38,7 @@ watchtower.towerdir=%[2]s/lnd%[1]s/data/watchtower
 noseedbackup=true
 no-macaroons=true
 accept-keysend=1
-debuglevel=error
+debuglevel=debug
 trickledelay=1000
 
 [bitcoin]

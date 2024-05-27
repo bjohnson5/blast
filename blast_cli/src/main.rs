@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
+use std::io::{stdin, stdout, Read, Write};
 
 use ctrlc;
 
@@ -267,13 +267,13 @@ async fn main() {
     bad_start.push(String::from("node1"));
     bad_start.push(String::from("node2"));
 
-    match blast.add_event(15, "StartNode", Some(bad_start.clone())) {
+    match blast.add_event(5, "StartNode", Some(bad_start.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(15, "StartNode", None) {
+    match blast.add_event(5, "StartNode", None) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
@@ -285,13 +285,13 @@ async fn main() {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(15, "StopNode", Some(bad_start.clone())) {
+    match blast.add_event(5, "StopNode", Some(bad_start.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(15, "StopNode", None) {
+    match blast.add_event(5, "StopNode", None) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
@@ -304,44 +304,6 @@ async fn main() {
         }
     }
 
-    let mut bad_open = Vec::new();
-    bad_open.push(String::from("node1"));
-    //let mut good_open = Vec::new();
-    //good_open.push(String::from("node1"));
-    //good_open.push(String::from("node2"));
-    //good_open.push(String::from("5000"));
-    //good_open.push(String::from("0"));
-    let mut bad_open1 = Vec::new();
-    bad_open1.push(String::from("node1"));
-    bad_open1.push(String::from("node2"));
-    bad_open1.push(String::from("5000"));
-    bad_open1.push(String::from("dfadfae"));
-
-    match blast.add_event(20, "OpenChannel", Some(bad_open.clone())) {
-        Ok(_) => {},
-        Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
-        }
-    }
-    match blast.add_event(20, "OpenChannel", Some(bad_open1.clone())) {
-        Ok(_) => {},
-        Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
-        }
-    }
-    match blast.add_event(20, "OpenChannel", None) {
-        Ok(_) => {},
-        Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
-        }
-    }
-    //match blast.add_event(20, "OpenChannel", Some(good_open.clone())) {
-    //    Ok(_) => {},
-    //    Err(e) => {
-    //        println!("{}", format!("Error adding event: {}", e));
-    //    }
-    //}
-
     let mut bad_close = Vec::new();
     bad_close.push(String::from("node1"));
     let mut good_close = Vec::new();
@@ -351,25 +313,64 @@ async fn main() {
     bad_close1.push(String::from("node1"));
     bad_close1.push(String::from("node2"));
 
-    match blast.add_event(20, "CloseChannel", Some(bad_close.clone())) {
+    match blast.add_event(10, "CloseChannel", Some(bad_close.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(20, "CloseChannel", Some(bad_close1.clone())) {
+    match blast.add_event(10, "CloseChannel", Some(bad_close1.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
-    match blast.add_event(20, "CloseChannel", None) {
+    match blast.add_event(10, "CloseChannel", None) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
         }
     }
     match blast.add_event(10, "CloseChannel", Some(good_close.clone())) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", format!("Error adding event: {}", e));
+        }
+    }
+
+    let mut bad_open = Vec::new();
+    bad_open.push(String::from("node1"));
+    let mut good_open = Vec::new();
+    good_open.push(String::from("blast-0000"));
+    good_open.push(String::from("blast-0001"));
+    good_open.push(String::from("30000"));
+    good_open.push(String::from("0"));
+    good_open.push(String::from("0"));
+    let mut bad_open1 = Vec::new();
+    bad_open1.push(String::from("node1"));
+    bad_open1.push(String::from("node2"));
+    bad_open1.push(String::from("5000"));
+    bad_open1.push(String::from("dfadfae"));
+
+    match blast.add_event(23, "OpenChannel", Some(bad_open.clone())) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", format!("Error adding event: {}", e));
+        }
+    }
+    match blast.add_event(23, "OpenChannel", Some(bad_open1.clone())) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", format!("Error adding event: {}", e));
+        }
+    }
+    match blast.add_event(23, "OpenChannel", None) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", format!("Error adding event: {}", e));
+        }
+    }
+    match blast.add_event(23, "OpenChannel", Some(good_open.clone())) {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error adding event: {}", e));
@@ -398,16 +399,22 @@ async fn main() {
         }
     };
 
-    // Wait for Ctrl+C signal to shutdown
-    while running.load(Ordering::SeqCst) {
-        thread::sleep(std::time::Duration::from_secs(1));
-    }
+    // Pause and let the sim run until ENTER is pressed
+    // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to stay alive
+    // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown
+    pause();
 
     // Stop the blast simulation
     blast.stop_simulation();
 
+    // Wait for blast simulation to stop
+    while let Some(res) = sim_tasks.join_next().await {
+        if let Err(_) = res {
+            println!("Error waiting for simulation to stop");
+        }
+    }
+
     // --------------------------------------- Perform more queries of the network, reconfigure network, events, payment activity and then could run again ---------------------------------------------
-    // TODO: make this work. currently lnd shutsdown on Ctrlc so the RPC calls fail here. need to keep lnd alive until we call stop_network
     match blast.list_channels(String::from("blast-0000")).await {
         Ok(s) => {
             println!("Channels Node 0000: {}", s);
@@ -427,18 +434,18 @@ async fn main() {
     }
     // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+    // Pause and let the network still run until ENTER is pressed
+    // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to be shutdown by a graceful RPC call and not the os signal
+    // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown
+    pause();
+
+    // Theoretically the simulation could be started again here after reconfiguring and before stopping the models
+
     // Stop the models
     match blast.stop_network().await {
         Ok(_) => {},
         Err(e) => {
             println!("Failed to stop the network: {:?}", e);       
-        }
-    }
-
-    // Wait for blast simulation to stop
-    while let Some(res) = sim_tasks.join_next().await {
-        if let Err(_) = res {
-            println!("Error waiting for simulation to stop");
         }
     }
 
@@ -454,5 +461,13 @@ async fn main() {
         println!("Model process exited with status: {:?}", exit_status);
     }
 
+    running.store(false, Ordering::SeqCst);
     println!("BLAST CLI shutting down...");
+}
+
+fn pause() {
+    let mut stdout = stdout();
+    stdout.write(b"Press Enter to continue...").unwrap();
+    stdout.flush().unwrap();
+    stdin().read(&mut [0]).unwrap();
 }

@@ -10,6 +10,7 @@ use std::path::Path;
 use std::fs;
 use std::thread;
 use std::time::Duration;
+use std::process::Stdio;
 
 use anyhow::Error;
 use tonic::transport::Channel;
@@ -115,7 +116,7 @@ impl BlastModelManager {
     
         current_dir.push("../blast_models/".to_owned()+&model.config.name+"/"+&model.config.start);
         let model_dir = current_dir.to_string_lossy().into_owned();
-        let child = match Command::new(model_dir)
+        let child = match Command::new(model_dir).stdout(Stdio::null())
         .spawn() {
             Ok(c) => c,
             Err(_) => {

@@ -10,7 +10,8 @@ use anyhow::Error;
 use tokio::sync::mpsc::Sender;
 
 pub const FRAME_RATE: u64 = 1;
-pub const BLOCKS_PER_FRAME: u64 = 10;
+pub const MINE_RATE: u64 = 5;
+pub const BLOCKS_PER_MINE: u64 = 10;
 
 pub struct BlastEventManager {
     running: Arc<AtomicBool>,
@@ -56,6 +57,13 @@ impl BlastEventManager {
 
             log::info!("BlastEventManager running frame number {}", frame_num);
 
+            if frame_num % MINE_RATE == 0 {
+                match crate::mine_blocks(&mut self.bitcoin_rpc, BLOCKS_PER_MINE) {
+                    Ok(_) => {},
+                    Err(e) => return Err(anyhow::Error::msg(e)),
+                }
+            }
+
             if self.events.contains_key(&frame_num) {
                 let current_events = &self.events[&frame_num];
                 let current_events_iter = current_events.iter();
@@ -65,11 +73,6 @@ impl BlastEventManager {
                         return Err(anyhow::Error::msg("Error sending event."));
                     }
                 }
-            }
-
-            match crate::mine_blocks(&mut self.bitcoin_rpc, BLOCKS_PER_FRAME) {
-                Ok(_) => {},
-                Err(e) => return Err(anyhow::Error::msg(e)),
             }
 
             frame_num = frame_num + 1;
