@@ -3,6 +3,7 @@ module blast_lnd
 require (
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/lightningnetwork/lnd v0.17.4-beta.rc1
+	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 )
 
 require (
@@ -154,7 +155,7 @@ require (
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
-	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // indirect
+	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // direct
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect

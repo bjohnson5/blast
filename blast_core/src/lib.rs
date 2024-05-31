@@ -235,7 +235,8 @@ impl Blast {
             Ok(_) => {
                 if confirm {
                     thread::sleep(Duration::from_secs(5));
-                    mine_blocks(&mut self.bitcoin_rpc, 100)?;
+                    mine_blocks(&mut self.bitcoin_rpc, 10)?;
+                    thread::sleep(Duration::from_secs(5));
                 }
                 Ok(())
             },
@@ -277,7 +278,9 @@ impl Blast {
                 .map_err(|e| e.to_string())?;
 
                 if confirm {
-                    mine_blocks(&mut self.bitcoin_rpc, 50)?;
+                    thread::sleep(Duration::from_secs(5));
+                    mine_blocks(&mut self.bitcoin_rpc, 10)?;
+                    thread::sleep(Duration::from_secs(5));
                 }
                 Ok(format!("{}", txid))
             },

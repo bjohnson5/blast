@@ -37,7 +37,7 @@ async fn main() {
 
     // Create the network
     let mut m = HashMap::new();
-    m.insert(String::from("blast_lnd"), 2);
+    m.insert(String::from("blast_lnd"), 100);
     blast.create_network("test", m);
     // OR blast.load()
 
@@ -51,8 +51,9 @@ async fn main() {
     };
 
     // Example operations that the blast cli will need to do -- will eventually be cleaned up -- testing purposes only right now
-    // Add command line interface to let the user make these calls
-    // -------------------------------------------------------------------------------------------------------------------------------
+    // TODO: Add command line interface to let the user make these calls
+    // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    println!("----------------------------------------------- GET NETWORK INFO -----------------------------------------------");
     
     for node_id in blast.get_nodes() {
         match blast.get_pub_key(node_id.clone()).await {
@@ -259,8 +260,12 @@ async fn main() {
         }
     }
 
+    println!("----------------------------------------------- ADD ACTIVITY -----------------------------------------------");
+
     blast.add_activity("blast-0000", "blast-0001", 0, None, 1, 2000);
     
+    println!("----------------------------------------------- ADD EVENTS -----------------------------------------------");
+
     let mut good_start = Vec::new();
     good_start.push(String::from("node1"));
     let mut bad_start = Vec::new();
@@ -379,7 +384,11 @@ async fn main() {
 
     //blast.save();
 
-    // -------------------------------------------------------------------------------------------------------------------------------
+    // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    // Finalize and run the simulation
+
+    println!("----------------------------------------------- RUN SIMULATION -----------------------------------------------");
 
     // Finalize the simulation and make it ready to run
     match blast.finalize_simulation().await {
@@ -404,6 +413,10 @@ async fn main() {
     // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown
     pause();
 
+    // Stop the activity and events
+
+    println!("----------------------------------------------- STOP SIMULATION -----------------------------------------------");
+
     // Stop the blast simulation
     blast.stop_simulation();
 
@@ -414,7 +427,39 @@ async fn main() {
         }
     }
 
-    // --------------------------------------- Perform more queries of the network, reconfigure network, events, payment activity and then could run again ---------------------------------------------
+    // Make changes to the network
+    // TODO: Add command line interface to let the user make these calls
+    // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    println!("----------------------------------------------- ADD MORE CHANNELS/ACTIVITY -----------------------------------------------");
+
+    for i in 2..=6 {
+        let param = format!("blast-000{}", i);
+        println!("Opening channel from blast-0000 -> {}", param.clone());
+        match blast.connect_peer(String::from("blast-0000"), param.clone()).await {
+            Ok(_) => {},
+            Err(e) => {
+                println!("{}", format!("Unable to connect peers: {}", e));
+            }
+        }
+        match blast.open_channel(String::from("blast-0000"), param.clone(), 30000, 0, i, true).await {
+            Ok(_) => {},
+            Err(e) => {
+                println!("{}", format!("Unable to open channel: {}", e));
+            }
+        }
+
+        blast.add_activity("blast-0000", &param.clone(), 0, None, 1, 2000);
+    }
+
+    match blast.list_peers(String::from("blast-0000")).await {
+        Ok(s) => {
+            println!("Peers Node 0000: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to list peers: {}", e));
+        }
+    }
+
     match blast.list_channels(String::from("blast-0000")).await {
         Ok(s) => {
             println!("Channels Node 0000: {}", s);
@@ -423,23 +468,73 @@ async fn main() {
             println!("{}", format!("Unable to list channels: {}", e));
         }
     }
+    // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    match blast.list_peers(String::from("blast-0001")).await {
-        Ok(s) => {
-            println!("Peers Node 0001: {}", s);
-        },
+    // Run the simulation again
+
+    println!("----------------------------------------------- RUN SIMULATION -----------------------------------------------");
+
+    // Finalize the simulation and make it ready to run
+    match blast.finalize_simulation().await {
+        Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Failed to finalize the simulation: {:?}", e);
+            return;
+        }        
+    }
+
+    // Start the simulation
+    let mut sim_tasks = match blast.start_simulation().await {
+        Ok(j) => j,
+        Err(e) => {
+            println!("Failed to start the simulation: {:?}", e);
+            return;
+        }
+    };
+
+    pause();
+
+    // Stop the activity and events
+    println!("----------------------------------------------- STOP SIMULATION -----------------------------------------------");
+
+    // Stop the blast simulation
+    blast.stop_simulation();
+
+    // Wait for blast simulation to stop
+    while let Some(res) = sim_tasks.join_next().await {
+        if let Err(_) = res {
+            println!("Error waiting for simulation to stop");
         }
     }
-    // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    for i in 2..=6 {
+        let param = format!("blast-000{}", i);
+        match blast.list_channels(param.clone()).await {
+            Ok(s) => {
+                println!("Channels Node {}: {}", param.clone(), s);
+            },
+            Err(e) => {
+                println!("{}", format!("Unable to list channels: {}", e));
+            }
+        }
+
+        match blast.list_peers(param.clone()).await {
+            Ok(s) => {
+                println!("Peers Node {}: {}", param.clone(), s);
+            },
+            Err(e) => {
+                println!("{}", format!("Unable to list peers: {}", e));
+            }
+        }
+    }
 
     // Pause and let the network still run until ENTER is pressed
     // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to be shutdown by a graceful RPC call and not the os signal
     // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown
     pause();
 
-    // Theoretically the simulation could be started again here after reconfiguring and before stopping the models
+    // Stop the network
+    println!("----------------------------------------------- STOP NETWORK -----------------------------------------------");
 
     // Stop the models
     match blast.stop_network().await {
