@@ -1,10 +1,14 @@
-use std::process::Child;
+use std::process::{Command, Child};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
 use std::thread;
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::io::BufReader;
 
 use bitcoincore_rpc::Auth;
 use bitcoincore_rpc::RpcApi;
@@ -14,6 +18,11 @@ use anyhow::Error;
 use bitcoincore_rpc::Client;
 use tokio::task::JoinSet;
 use tokio::sync::mpsc;
+use serde::{Serialize, Deserialize};
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 mod blast_model_manager;
 use crate::blast_model_manager::*;
@@ -32,7 +41,7 @@ pub struct Blast {
 }
 
 /// The BlastNetwork describes how many nodes are run for each model.
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlastNetwork {
     name: String,
     model_map: HashMap<String, i32>
@@ -62,14 +71,19 @@ impl Blast {
     }
 
     /// Create a new network from scratch.
-    pub fn create_network(&mut self, name: &str, model_map: HashMap<String, i32>) {
+    pub async fn create_network(&mut self, name: &str, model_map: HashMap<String, i32>, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
         log::info!("Creating BLAST Network");
-        self.network = Some(BlastNetwork{name: String::from(name), model_map: model_map});
-    }
 
-    /// Start the simulation network. This will start the models and nodes, fund them with initial balances, open initial channels, etc.
-    pub async fn start_network(&mut self, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
-        log::info!("Starting BLAST Network");
+        let mut command = Command::new("bash");
+        let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
+        script_file.push_str("/start_bitcoind.sh");
+        command.arg(&script_file);
+        match command.output() {
+            Ok(_) => {},
+            Err(e) => return Err(format!("Could not start bitcoind: {}", e)),
+        };
+
+        self.network = Some(BlastNetwork{name: String::from(name), model_map: model_map});
 
         let net = match &self.network {
             Some(n) => n,
@@ -101,6 +115,15 @@ impl Blast {
         for (key, _) in net.model_map.clone().into_iter() {
             self.stop_model(key).await?
         }
+
+        let mut command = Command::new("bash");
+        let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
+        script_file.push_str("/stop_bitcoind.sh");
+        command.arg(&script_file);
+        match command.output() {
+            Ok(_) => {},
+            Err(e) => return Err(format!("Could not stop bitcoind: {}", e)),
+        };
 
         Ok(())
     }
@@ -165,13 +188,183 @@ impl Blast {
     }
 
     /// Load a simulation. This will load a saved simulation network (nodes, channels, balance) and load events/activity.
-    pub fn load(&mut self) {
+    pub async fn load(&mut self, sim_name: &str, sim_dir: &str, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
         log::info!("Loading BLAST Simulation");
+
+        // Get events
+        let mut events_path: String = sim_dir.to_owned();
+        events_path.push_str("/");
+        events_path.push_str(sim_name);
+        events_path.push_str("/");
+        events_path.push_str("events.json");
+        self.blast_event_manager.set_event_json(&events_path)?;
+  
+        // Get simln
+        // TODO: activity serialize/deserialize not working
+        //let mut simln_path: String = sim_dir.to_owned();
+        //simln_path.push_str("/");
+        //simln_path.push_str(sim_name);
+        //simln_path.push_str("/");
+        //simln_path.push_str("simln.json");
+        //self.blast_simln_manager.set_simln_json(&simln_path);
+
+        // Load bitcoind
+        let mut path: String = sim_dir.to_owned();
+        path.push_str("/");
+        path.push_str(sim_name);
+        path.push_str("/");
+        path.push_str("bitcoin.tar.gz");
+        let tar_gz = match File::open(path) {
+            Ok(t) => t,
+            Err(e) => return Err(format!("Error reading bitcoin data: {}", e)),
+        };
+
+        let tar = GzDecoder::new(tar_gz);
+        let mut archive = Archive::new(tar);
+        match archive.unpack("/root/.bitcoin") {
+            Ok(_) => {},
+            Err(e) => return Err(format!("Error reading simln data: {}", e)),
+        }
+
+        let mut command = Command::new("bash");
+        let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
+        script_file.push_str("/load_bitcoind.sh");
+        command.arg(&script_file);
+        match command.output() {
+            Ok(_) => {},
+            Err(e) => return Err(format!("Could not load bitcoind: {}", e)),
+        };
+        
+        // Get network from models.json file
+        let mut models_path: String = sim_dir.to_owned();
+        models_path.push_str("/");
+        models_path.push_str(sim_name);
+        models_path.push_str("/");
+        models_path.push_str("models.json");
+        let file = match File::open(models_path) {
+            Ok(f) => f,
+            Err(e) => return Err(format!("Error opening models file: {}", e)),
+        };
+        let reader = BufReader::new(file);
+        let net: BlastNetwork = match serde_json::from_reader(reader) {
+            Ok(n) => n,
+            Err(e) => return Err(format!("Error reading simln data: {}", e)),
+        };
+        self.network = Some(net.clone());
+
+        // Start the models and load the network
+        let mut child_list: Vec<Child> = Vec::new();
+        for (key, _) in net.model_map.clone().into_iter() {
+            let child = self.start_model(key.clone(), running.clone()).await?;
+            child_list.push(child);
+            self.blast_model_manager.load_model(key, sim_name.to_owned()).await?;
+        }
+
+        Ok(child_list)
     }
 
     /// Save a simulation. This will save off the current simulation network (nodes, channels, balances) and save events/activity.
-    pub fn save(&mut self) {
+    pub async fn save(&mut self, sim_name: &str, sim_dir: &str) -> Result<(), String> {
         log::info!("Saving BLAST Simulation");
+
+        // Create folder for sim_name in sim_dir
+        let mut path: String = sim_dir.to_owned();
+        path.push_str("/");
+        path.push_str(sim_name);
+        path.push_str("/");
+        match fs::create_dir_all(&path.clone()) {
+            Ok(_) => {},
+            Err(e) => return Err(format!("Error creating simulation directory: {}", e))
+        };
+
+        self.save_models(sim_name, &path.clone()).await?;
+        self.save_bitcoin(&path.clone())?;
+        self.save_simln(&path.clone())?;
+        self.save_events(&path.clone())?;
+
+        Ok(())
+    }
+
+    async fn save_models(&mut self, sim_name: &str, path: &str) -> Result<(), String> {
+
+        let net = match &self.network {
+            Some(n) => n,
+            None => return Err(format!("No network found")),
+        };
+
+        for (key, _) in net.model_map.clone().into_iter() {
+            self.blast_model_manager.save_model(key, sim_name.to_owned()).await?
+        }
+
+        // Create models.json file that contains the active model names and save it to sim_dir/sim_name
+        let json = match serde_json::to_string(&self.network.clone().unwrap()) {
+            Ok(s) => s,
+            Err(e) => return Err(format!("Error getting models data: {}", e))
+        };
+
+        let mut jsonfile = path.to_owned();
+        jsonfile.push_str("models.json");
+        let mut file = match File::create(&jsonfile) {
+            Ok(f) => f,
+            Err(e) => return Err(format!("Error creating models file: {}", e)),
+        };
+
+        match file.write_all(json.as_bytes()) {
+            Ok(_) => Ok(()),
+            Err(e) => return Err(format!("Error writing to models file: {}", e))
+        }
+    }
+
+    fn save_bitcoin(&self, path: &str) -> Result<(), String> {
+        // Zip up the ~/.bitcoin directory and copy it to sim_dir/sim_name
+        let mut tarfile = path.to_owned();
+        tarfile.push_str("bitcoin.tar.gz");
+        let tar_gz = match File::create(&tarfile) {
+            Ok(t) => t,
+            Err(e) => return Err(format!("Error saving bitcoin data dir: {}", e)),
+        };
+
+        let enc = GzEncoder::new(tar_gz, Compression::default());
+        let mut tar = tar::Builder::new(enc);
+
+        match tar.append_dir_all(".", "/root/.bitcoin") {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error saving bitcoin data dir: {}", e))
+        }
+    }
+
+    /// Create simln.json that contains the full simln data and copy it to sim_dir/sim_name
+    fn save_simln(&self, path: &str) -> Result<(), String> {
+        let json = self.blast_simln_manager.get_simln_json()?;
+
+        let mut jsonfile = path.to_owned();
+        jsonfile.push_str("simln.json");
+        let mut file = match File::create(&jsonfile) {
+            Ok(f) => f,
+            Err(e) => return Err(format!("Error creating simln file: {}", e)),
+        };
+
+        match file.write_all(json.as_bytes()) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error writing to simln file: {}", e))
+        }
+    }
+
+    // Create events.json that contains the list of events and copyt it to sim_dir/sim_name
+    fn save_events(&self, path: &str) -> Result<(), String> {
+        let json = self.blast_event_manager.get_event_json()?;
+
+        let mut jsonfile = path.to_owned();
+        jsonfile.push_str("events.json");
+        let mut file = match File::create(&jsonfile) {
+            Ok(f) => f,
+            Err(e) => return Err(format!("Error creating events file: {}", e)),
+        };
+
+        match file.write_all(json.as_bytes()) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error writing to events file: {}", e))
+        }
     }
 
     /// Create payment activity for the simulation.
@@ -234,6 +427,7 @@ impl Blast {
         match self.blast_model_manager.open_channel(node1_id, node2_id, amount, push_amount, chan_id).await {
             Ok(_) => {
                 if confirm {
+                    // TODO: how should we handle time (look at all sleep calls across the whole program)
                     thread::sleep(Duration::from_secs(5));
                     mine_blocks(&mut self.bitcoin_rpc, 10)?;
                     thread::sleep(Duration::from_secs(5));

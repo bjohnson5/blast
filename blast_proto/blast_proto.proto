@@ -18,6 +18,8 @@ service BlastRpc {
     rpc GetBtcAddress(BlastBtcAddressRequest) returns (BlastBtcAddressResponse) {}
     rpc GetListenAddress(BlastListenAddressRequest) returns (BlastListenAddressResponse) {}
     rpc StopModel(BlastStopModelRequest) returns (BlastStopModelResponse) {}
+    rpc Load(BlastLoadRequest) returns (BlastLoadResponse) {}
+    rpc Save(BlastSaveRequest) returns (BlastSaveResponse) {}
 }
 
 message BlastStartRequest {
@@ -135,5 +137,21 @@ message BlastStopModelRequest {
 }
 
 message BlastStopModelResponse {
+    bool success = 1;
+}
+
+message BlastLoadRequest {
+    string sim = 1;
+}
+
+message BlastLoadResponse {
+    bool success = 1;
+}
+
+message BlastSaveRequest {
+    string sim = 1;
+}
+
+message BlastSaveResponse {
     bool success = 1;
 }

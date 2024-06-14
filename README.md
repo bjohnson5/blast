@@ -67,18 +67,11 @@ git clone git@github.com:bjohnson5/blast.git
 ### Run CLI
 > There is no CLI yet. This is only a testing application right now, it will run some hard coded blast operations.
 ```bash
-./start_bitcoind.sh
 ./run_cli.sh
 ```
 
 ### Run Web Application
 > There is no web application yet. This is an empty project right now.
 ```bash
-./start_bitcoind.sh
 ./run_web.sh
-```
-
-### Stop / Reset Network
-```bash
-./stop_bitcoind.sh
 ```

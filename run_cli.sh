@@ -1,5 +1,5 @@
 #!/bin/bash
 
 cd blast_cli
-cargo run
+cargo run -- $1
 cd -

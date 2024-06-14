@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::fs::File;
+use std::io::BufReader;
 
+use serde::{Serialize, Deserialize};
 use sim_lib::ActivityDefinition;
 use sim_lib::Simulation;
 use sim_lib::LightningNode;
@@ -19,16 +22,25 @@ pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
 #[derive(Clone)]
 pub struct BlastSimLnManager {
     sim: Option<Simulation>,
-    activity: Vec<ActivityParser>,
-    nodes: Vec<NodeConnection>
+    data: BlastSimLnData
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct BlastSimLnData {
+    nodes: Vec<NodeConnection>,
+    activity: Vec<ActivityParser>
 }
 
 impl BlastSimLnManager {
     pub fn new() -> Self {
-        let simln = BlastSimLnManager {
-            sim: None,
+        let data = BlastSimLnData {
             activity: Vec::<ActivityParser>::new(),
             nodes: Vec::<NodeConnection>::new()
+        };
+
+        let simln = BlastSimLnManager {
+            sim: None,
+            data: data
         };
 
         simln
@@ -37,7 +49,7 @@ impl BlastSimLnManager {
     /// Create payment activity for the simulation.
     pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
         let a = ActivityParser{source: NodeId::Alias(String::from(source)), destination: NodeId::Alias(String::from(destination)), start_secs: start_secs, count: count, interval_secs: ValueOrRange::Value(interval_secs), amount_msat: ValueOrRange::Value(amount_msat)};
-        self.activity.push(a);
+        self.data.activity.push(a);
     }
 
     /// Add nodes from a json string returned by the model.
@@ -47,14 +59,38 @@ impl BlastSimLnManager {
             Err(e) => return Err(format!("Error adding nodes: {}", e))
         };
 
-        self.nodes.append(&mut nodes);
+        self.data.nodes.append(&mut nodes);
+        Ok(())
+    }
+
+    /// Get simln json data.
+    pub fn get_simln_json(&self) -> Result<String, String> {
+        match serde_json::to_string(&self.data) {
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("Error getting simln data: {}", e))
+        }
+    }
+
+    /// Set the simln data from a json file.
+    pub fn set_simln_json(&mut self, path: &str) -> Result<(), String> {
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => return Err(format!("Error opening simln file: {}", e)),
+        };
+
+        let reader = BufReader::new(file);
+        self.data = match serde_json::from_reader(reader) {
+            Ok(d) => d,
+            Err(e) => return Err(format!("Error reading simln data: {}", e)),
+        };
+
         Ok(())
     }
 
     /// Create a simln simulation from the json data blast gets from each model in the sim.
     pub async fn setup_simln(&mut self) -> Result<(), anyhow::Error> {
-        let nodes = self.nodes.clone();
-        let activity = self.activity.clone();
+        let nodes = self.data.nodes.clone();
+        let activity = self.data.activity.clone();
 
         let mut clients: HashMap<PublicKey, Arc<Mutex<dyn LightningNode>>> = HashMap::new();
         let mut pk_node_map = HashMap::new();
@@ -177,7 +213,7 @@ impl BlastSimLnManager {
     /// Get all the nodes.
     pub fn get_nodes(&self) -> Vec<String> {
         let mut ids = Vec::<String>::new();
-        for n in &self.nodes {
+        for n in &self.data.nodes {
             let id = match n {
                 NodeConnection::LND(c) => c.id.to_string(),
                 NodeConnection::CLN(_) => String::from(""),

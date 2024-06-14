@@ -88,9 +88,10 @@ impl BlastModelManager {
                             }
                         }
                     },
-                    BlastEvent::NoEvent => {
-                        log::info!("BlastModelManager running event No");
-                    }
+                    BlastEvent::OnChainTransaction(_, _, _) => {
+                        // TODO: implement on chain event
+                        log::info!("BlastModelManager running event OnChainTransaction");
+                    },
                 }
             } else {
                 return Ok(())
@@ -147,7 +148,7 @@ impl BlastModelManager {
     }
 
     /// Stop a model. The model process should stop all of its nodes and exit.
-    pub async fn stop_model(&mut self, model: String) -> Result<(), String>{
+    pub async fn stop_model(&mut self, model: String) -> Result<(), String> {
         let client = self.get_model_client(model)?;
 
         let request = tonic::Request::new(BlastStopModelRequest {
@@ -165,6 +166,50 @@ impl BlastModelManager {
         } else {
             Err(String::from("Model did not shutdown successfully"))
         }
+    }
+
+    /// Tell a model to load a simulation.
+    pub async fn load_model(&mut self, model: String, sim_name: String) -> Result<(), String> {
+        let client = self.get_model_client(model)?;
+
+        let request = tonic::Request::new(BlastLoadRequest {
+            sim: sim_name
+        });
+    
+        let response = match client.load(request).await {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(format!("RPC load failed: {:?}", e));
+            }
+        };
+
+        if response.get_ref().success {
+            Ok(())
+        } else {
+            Err(String::from("Model did not load successfully"))
+        }       
+    }
+
+    /// Tell a model to save its current state.
+    pub async fn save_model(&mut self, model: String, sim_name: String) -> Result<(), String> {
+        let client = self.get_model_client(model)?;
+
+        let request = tonic::Request::new(BlastSaveRequest {
+            sim: sim_name
+        });
+    
+        let response = match client.save(request).await {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(format!("RPC save failed: {:?}", e));
+            }
+        };
+
+        if response.get_ref().success {
+            Ok(())
+        } else {
+            Err(String::from("Model did not save successfully"))
+        }        
     }
 
     /// Start a given number of nodes for the given model name.

@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::io::{stdin, stdout, Read, Write};
+use std::time::Duration;
+use std::thread;
+use std::env;
 
 use ctrlc;
 
@@ -9,6 +12,15 @@ use blast_core::Blast;
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 {
+        load_simulation(args[1].clone()).await;
+    } else {
+        new_simulation().await;
+    }
+}
+
+async fn new_simulation() {
     println!("BLAST CLI starting up...");
 
     // Set up a Ctrl+C signal handler
@@ -22,8 +34,7 @@ async fn main() {
     let mut blast = Blast::new();
 
     // Control Flow: 
-    // create_network -- creates the BlastNetwork which contains the models needed and the number of nodes per model
-    // start_network -- starts models and nodes
+    // create_network -- starts models and nodes OR load network
     // ** user can now add activity, events, interact with nodes, connect outside nodes, etc...
     // finalize_simulation -- gets the simulation ready to be run
     // start_simulation -- runs events/activity
@@ -37,12 +48,8 @@ async fn main() {
 
     // Create the network
     let mut m = HashMap::new();
-    m.insert(String::from("blast_lnd"), 100);
-    blast.create_network("test", m);
-    // OR blast.load()
-
-    // Start the network
-    let models = match blast.start_network(running.clone()).await {
+    m.insert(String::from("blast_lnd"), 10);
+    let models = match blast.create_network("test", m, running.clone()).await {
         Ok(m) => m,
         Err(e) => {
             println!("{}", format!("Failed to start network: {}", e));
@@ -382,7 +389,12 @@ async fn main() {
         }
     }
 
-    //blast.save();
+    match blast.save("test1", "/home/blast_sims").await {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", format!("Error saving simulation: {}", e));
+        }        
+    }
 
     // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -431,7 +443,7 @@ async fn main() {
     // TODO: Add command line interface to let the user make these calls
     // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     println!("----------------------------------------------- ADD MORE CHANNELS/ACTIVITY -----------------------------------------------");
-
+    thread::sleep(Duration::from_secs(5));
     for i in 2..=6 {
         let param = format!("blast-000{}", i);
         println!("Opening channel from blast-0000 -> {}", param.clone());
@@ -467,6 +479,13 @@ async fn main() {
         Err(e) => {
             println!("{}", format!("Unable to list channels: {}", e));
         }
+    }
+
+    match blast.save("test2", "/home/blast_sims").await {
+        Ok(_) => {},
+        Err(e) => {
+            println!("{}", format!("Error saving simulation: {}", e));
+        }        
     }
     // --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -528,6 +547,127 @@ async fn main() {
         }
     }
 
+    // Pause and let the network still run until ENTER is pressed
+    // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to be shutdown by a graceful RPC call and not the os signal
+    // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown
+    pause();
+
+    // Stop the network
+    println!("----------------------------------------------- STOP NETWORK -----------------------------------------------");
+
+    // Stop the models
+    match blast.stop_network().await {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Failed to stop the network: {:?}", e);       
+        }
+    }
+
+    // Wait for the models to stop
+    for mut child in models {
+        let exit_status = match child.wait() {
+            Ok(s) => Some(s),
+            Err(e) => {
+                println!("Failed to wait for child process: {:?}", e);
+                None
+            }
+        };
+        println!("Model process exited with status: {:?}", exit_status);
+    }
+
+    running.store(false, Ordering::SeqCst);
+    println!("BLAST CLI shutting down...");
+}
+
+async fn load_simulation(name: String) {
+    println!("BLAST CLI starting up...");
+
+    // Set up a Ctrl+C signal handler
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    }).expect("Error setting Ctrl-C handler");
+
+    // Create the blast core object
+    let mut blast = Blast::new();
+
+    let models = match blast.load(&name, "/home/blast_sims", running.clone()).await {
+        Ok(m) => m,
+        Err(e) => {
+            println!("{}", format!("Failed to start network: {}", e));
+            return;
+        }
+    };
+/*
+    println!("----------------------------------------------- GET NETWORK INFO -----------------------------------------------");
+
+    for node_id in blast.get_nodes() {
+        match blast.get_pub_key(node_id.clone()).await {
+            Ok(s) => {
+                println!("PubKey Node {}: {}", node_id, s);
+            },
+            Err(e) => {
+                println!("{}", format!("Unable to get pub key: {}", e));
+            }
+        }
+    }
+
+    match blast.list_peers(String::from("blast-0000")).await {
+        Ok(s) => {
+            println!("Peers Node 0000: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to list peers: {}", e));
+        }
+    }
+
+    match blast.wallet_balance(String::from("blast-0000")).await {
+        Ok(s) => {
+            println!("Wallet Balance Node 0000: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to get wallet balance: {}", e));
+        }
+    }
+
+    println!("----------------------------------------------- RUN SIMULATION -----------------------------------------------");
+
+    // Finalize the simulation and make it ready to run
+    match blast.finalize_simulation().await {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Failed to finalize the simulation: {:?}", e);
+            return;
+        }        
+    }
+
+    // Start the simulation
+    let mut sim_tasks = match blast.start_simulation().await {
+        Ok(j) => j,
+        Err(e) => {
+            println!("Failed to start the simulation: {:?}", e);
+            return;
+        }
+    };
+
+    // Pause and let the sim run until ENTER is pressed
+    // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to stay alive
+    // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown
+    pause();
+
+    println!("----------------------------------------------- STOP SIMULATION -----------------------------------------------");
+
+    // Stop the blast simulation
+    blast.stop_simulation();
+
+    // Wait for blast simulation to stop
+    while let Some(res) = sim_tasks.join_next().await {
+        if let Err(_) = res {
+            println!("Error waiting for simulation to stop");
+        }
+    }
+*/
     // Pause and let the network still run until ENTER is pressed
     // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to be shutdown by a graceful RPC call and not the os signal
     // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown

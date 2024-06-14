@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"os"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 
@@ -13,7 +14,7 @@ import (
 type BlastRpcServer struct {
 	pb.UnimplementedBlastRpcServer
 	blast_lnd     *BlastLnd
-	open_channels map[int]*lnrpc.ChannelPoint
+	open_channels map[int64]*lnrpc.ChannelPoint
 }
 
 func (s *BlastRpcServer) StartNodes(ctx context.Context, request *pb.BlastStartRequest) (*pb.BlastStartResponse, error) {
@@ -170,7 +171,7 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 					switch rpcUpdate.Update.(type) {
 					case *lnrpc.OpenStatusUpdate_ChanPending:
 					case *lnrpc.OpenStatusUpdate_ChanOpen:
-						s.open_channels[int(request.ChannelId)] = rpcUpdate.GetChanOpen().ChannelPoint
+						s.open_channels[request.ChannelId] = rpcUpdate.GetChanOpen().ChannelPoint
 						return
 					case *lnrpc.OpenStatusUpdate_PsbtFund:
 					}
@@ -189,7 +190,7 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 	}
 
 	var chan_point *lnrpc.ChannelPoint
-	if val, ok := s.open_channels[int(request.ChannelId)]; ok {
+	if val, ok := s.open_channels[request.ChannelId]; ok {
 		chan_point = val
 	} else {
 		return response, err_val
@@ -205,6 +206,7 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 		} else {
 			err_val = nil
 			response.Success = true
+			delete(s.open_channels, request.ChannelId)
 		}
 	}
 
@@ -297,5 +299,40 @@ func (s *BlastRpcServer) StopModel(ctx context.Context, request *pb.BlastStopMod
 
 	response := &pb.BlastStopModelResponse{Success: true}
 	s.blast_lnd.shutdown_ch <- struct{}{}
+	return response, nil
+}
+
+func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest) (*pb.BlastLoadResponse, error) {
+	response := &pb.BlastLoadResponse{
+		Success: true,
+	}
+
+	// TODO: implement
+
+	return response, nil
+}
+
+func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest) (*pb.BlastSaveResponse, error) {
+	response := &pb.BlastSaveResponse{
+		Success: false,
+	}
+
+	sim_dir := s.blast_lnd.data_dir + "/../blast_sims/"
+
+	if _, err := os.Stat(sim_dir); os.IsNotExist(err) {
+		os.MkdirAll(sim_dir, 0700)
+	}
+
+	sim_archive, err := os.Create(sim_dir + request.Sim + ".tar.gz")
+	if err != nil {
+		return response, err
+	}
+
+	err = Tar(s.blast_lnd.data_dir, sim_archive)
+	if err != nil {
+		return response, err
+	}
+
+	response.Success = true
 	return response, nil
 }

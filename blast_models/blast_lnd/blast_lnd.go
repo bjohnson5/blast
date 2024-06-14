@@ -1,8 +1,11 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -73,6 +76,7 @@ type BlastLnd struct {
 	rpc_addresses    map[string]string
 	simln_data       []byte
 	shutdown_ch      chan struct{}
+	data_dir         string
 	wg               *sync.WaitGroup
 }
 
@@ -84,7 +88,15 @@ func main() {
 	var wg sync.WaitGroup
 	shutdown_channel := make(chan struct{})
 
-	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, wg: &wg}
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		blast_lnd_log("Could not get executable directory.")
+		return
+	}
+
+	blast_data_dir := dir + "/blast_data"
+
+	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, data_dir: blast_data_dir, wg: &wg}
 	server := start_grpc_server(&wg, &blast_lnd)
 
 	wg.Add(1)
@@ -94,6 +106,7 @@ func main() {
 		<-shutdown_channel
 		blast_lnd_log("Received shutdown signal")
 		server.GracefulStop()
+		os.RemoveAll(blast_lnd.data_dir)
 	}()
 
 	blast_lnd_log("Model started")
@@ -110,23 +123,16 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 		return err
 	}
 
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
-	if err != nil {
-		blast_lnd_log("Could not get executable directory.")
-		return err
-	}
-
-	blast_data_dir := dir + "/blast_data"
 	node_list := SimJsonFile{Nodes: []SimLnNode{}}
 	used_ports := make([]int, 2*num_nodes)
 	for i := 0; i < num_nodes; i++ {
 		var listen_port string
 		var rpc_port string
 		node_id := pad_with_zeros(i, 4)
-		lnddir := blast_data_dir + "/lnd" + node_id + "/"
+		lnddir := blnd.data_dir + "/lnd" + node_id + "/"
 		used_ports, listen_port, rpc_port = get_ports(used_ports)
 		alias := "blast-" + node_id
-		err := write_config(node_id, blast_data_dir, lnddir, listen_port, rpc_port, alias)
+		err := write_config(node_id, blnd.data_dir, lnddir, listen_port, rpc_port, alias)
 		if err != nil {
 			blast_lnd_log("Error writing lnd config to file: " + err.Error())
 			return err
@@ -142,7 +148,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 		}
 		implCfg := loadedConfig.ImplementationConfig(shutdownInterceptor)
 
-		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: "/home/admin.macaroon", Cert: blast_data_dir + "/lnd" + node_id + "/tls.cert"}
+		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: "/home/admin.macaroon", Cert: blnd.data_dir + "/lnd" + node_id + "/tls.cert"}
 		node_list.Nodes = append(node_list.Nodes, n)
 		blnd.listen_addresses[alias] = "localhost:" + listen_port
 		blnd.rpc_addresses[alias] = "https://" + "127.0.0.1:" + rpc_port
@@ -181,7 +187,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 
 	time.Sleep(10 * time.Second)
 
-	err = blnd.create_sim_ln_data(node_list, blast_data_dir+"/sim.json")
+	err = blnd.create_sim_ln_data(node_list, blnd.data_dir+"/sim.json")
 	if err != nil {
 		blast_lnd_log("Error creating simln data" + err.Error())
 		return err
@@ -272,9 +278,139 @@ func ensure_directory_exists(filePath string) error {
 	return os.MkdirAll(dir, os.ModePerm)
 }
 
+// Tar takes a source and variable writers and walks 'source' writing each file
+// found to the tar writer; the purpose for accepting multiple writers is to allow
+// for multiple outputs (for example a file, or md5 hash)
+func Tar(src string, writers ...io.Writer) error {
+	// ensure the src actually exists before trying to tar it
+	if _, err := os.Stat(src); err != nil {
+		return fmt.Errorf("unable to tar files - %v", err.Error())
+	}
+
+	mw := io.MultiWriter(writers...)
+
+	gzw := gzip.NewWriter(mw)
+	defer gzw.Close()
+
+	tw := tar.NewWriter(gzw)
+	defer tw.Close()
+
+	// walk path
+	return filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
+
+		// return on any error
+		if err != nil {
+			return err
+		}
+
+		// return on non-regular files (thanks to [kumo](https://medium.com/@komuw/just-like-you-did-fbdd7df829d3) for this suggested update)
+		if !fi.Mode().IsRegular() {
+			return nil
+		}
+
+		// create a new dir/file header
+		header, err := tar.FileInfoHeader(fi, fi.Name())
+		if err != nil {
+			return err
+		}
+
+		// update the name to correctly reflect the desired destination when untaring
+		header.Name = strings.TrimPrefix(strings.Replace(file, src, "", -1), string(filepath.Separator))
+
+		// write the header
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// open files for taring
+		f, err := os.Open(file)
+		if err != nil {
+			return err
+		}
+
+		// copy file data into tar writer
+		if _, err := io.Copy(tw, f); err != nil {
+			return err
+		}
+
+		// manually close here after each file operation; defering would cause each file close
+		// to wait until all operations have completed.
+		f.Close()
+
+		return nil
+	})
+}
+
+// Untar takes a destination path and a reader; a tar reader loops over the tarfile
+// creating the file structure at 'dst' along the way, and writing any files
+func Untar(dst string, r io.Reader) error {
+
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+
+	for {
+		header, err := tr.Next()
+
+		switch {
+
+		// if no more files are found return
+		case err == io.EOF:
+			return nil
+
+		// return any other error
+		case err != nil:
+			return err
+
+		// if the header is nil, just skip it (not sure how this happens)
+		case header == nil:
+			continue
+		}
+
+		// the target location where the dir/file should be created
+		target := filepath.Join(dst, header.Name)
+
+		// the following switch could also be done using fi.Mode(), not sure if there
+		// a benefit of using one vs. the other.
+		// fi := header.FileInfo()
+
+		// check the file type
+		switch header.Typeflag {
+
+		// if its a dir and it doesn't exist create it
+		case tar.TypeDir:
+			if _, err := os.Stat(target); err != nil {
+				if err := os.MkdirAll(target, 0755); err != nil {
+					return err
+				}
+			}
+
+		// if it's a file create it
+		case tar.TypeReg:
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+
+			// copy over contents
+			if _, err := io.Copy(f, tr); err != nil {
+				return err
+			}
+
+			// manually close here after each file operation; defering would cause each file close
+			// to wait until all operations have completed.
+			f.Close()
+		}
+	}
+}
+
 func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 	server := grpc.NewServer()
-	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd, open_channels: make(map[int]*lnrpc.ChannelPoint)})
+	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd, open_channels: make(map[int64]*lnrpc.ChannelPoint)})
 
 	address := "localhost:5050"
 	listener, err := net.Listen("tcp", address)
