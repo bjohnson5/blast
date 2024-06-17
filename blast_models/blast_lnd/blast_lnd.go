@@ -76,9 +76,21 @@ type BlastLnd struct {
 	rpc_addresses    map[string]string
 	simln_data       []byte
 	shutdown_ch      chan struct{}
+	home_dir         string
 	data_dir         string
 	wg               *sync.WaitGroup
 }
+
+type LoadedNode struct {
+	alias               string
+	loadedConfig        *lnd.Config
+	implCfg             *lnd.ImplementationCfg
+	shutdownInterceptor signal.Interceptor
+	listen_port         string
+	rpc_port            string
+}
+
+var saved_ports map[string]*net.Listener
 
 func main() {
 	go func() {
@@ -96,7 +108,7 @@ func main() {
 
 	blast_data_dir := dir + "/blast_data"
 
-	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, data_dir: blast_data_dir, wg: &wg}
+	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, home_dir: dir, data_dir: blast_data_dir, wg: &wg}
 	server := start_grpc_server(&wg, &blast_lnd)
 
 	wg.Add(1)
@@ -196,6 +208,120 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 	return nil
 }
 
+func (blnd *BlastLnd) load_nodes(simname string) error {
+	blast_lnd_log("Loading nodes")
+
+	// Untar the saved sim to blast data dir
+	tar_file := blnd.home_dir + "/blast_sims/" + simname + ".tar.gz"
+	file, err := os.Open(tar_file)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(blnd.data_dir, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	err = Untar(blnd.data_dir, file)
+	if err != nil {
+		return err
+	}
+
+	shutdownInterceptor, err := signal.Intercept()
+	if err != nil {
+		blast_lnd_log("Could not set up shutdown interceptor.")
+		return err
+	}
+
+	files, err := os.ReadDir(blnd.data_dir)
+	if err != nil {
+		return err
+	}
+
+	var loaded_nodes []LoadedNode
+	saved_ports = make(map[string]*net.Listener)
+	node_list := SimJsonFile{Nodes: []SimLnNode{}}
+	for _, file := range files {
+		if !file.IsDir() {
+			continue
+		}
+		name := file.Name()
+		lnddir := blnd.data_dir + "/" + name + "/"
+		alias := "blast-" + string(name[len(name)-4:])
+		lnd.DefaultLndDir = lnddir
+		lnd.DefaultConfigFile = lnddir + "lnd.conf"
+		loadedConfig, err := lnd.LoadConfig(shutdownInterceptor)
+		if err != nil {
+			if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
+				blast_lnd_log("Error loading config.")
+			}
+			return err
+		}
+		implCfg := loadedConfig.ImplementationConfig(shutdownInterceptor)
+		rpc_port := loadedConfig.RawRPCListeners[0][10:]
+		listen_port := loadedConfig.RawListeners[0]
+		blnd.listen_addresses[alias] = "localhost:" + listen_port
+		blnd.rpc_addresses[alias] = "https://" + "127.0.0.1:" + rpc_port
+		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: "/home/admin.macaroon", Cert: blnd.data_dir + "/" + name + "/tls.cert"}
+		node_list.Nodes = append(node_list.Nodes, n)
+		ln := LoadedNode{alias: alias, loadedConfig: loadedConfig, implCfg: implCfg, shutdownInterceptor: shutdownInterceptor, listen_port: listen_port, rpc_port: rpc_port}
+		loaded_nodes = append(loaded_nodes, ln)
+
+		// bind to all ports that we will need
+		save_port(listen_port)
+		save_port(rpc_port)
+	}
+
+	for i, n := range loaded_nodes {
+		blast_lnd_log("Starting node: " + n.alias)
+
+		free_port(n.listen_port)
+		free_port(n.rpc_port)
+
+		blnd.wg.Add(1)
+		go start_lnd(n.loadedConfig, n.implCfg, n.shutdownInterceptor, blnd.wg)
+		if i%10 == 0 {
+			time.Sleep(10 * time.Second)
+		}
+	}
+
+	simfile := blnd.data_dir + "/" + "sim.json"
+	jsonFile, err := os.Open(simfile)
+	if err != nil {
+		return err
+	}
+	jsonData, _ := io.ReadAll(jsonFile)
+	blnd.simln_data = jsonData
+
+	for _, n := range node_list.Nodes {
+		blast_lnd_log(n.Id)
+		var tlsCreds credentials.TransportCredentials
+		tlsCreds, err = credentials.NewClientTLSFromFile(n.Cert, "")
+		if err != nil {
+			blast_lnd_log("Error reading TLS cert" + err.Error())
+			continue
+		}
+
+		opts := []grpc.DialOption{
+			grpc.WithBlock(),
+			grpc.WithTransportCredentials(tlsCreds),
+		}
+		blast_lnd_log(n.Address)
+		client, err := grpc.Dial(n.Address, opts...)
+		if err != nil {
+			blast_lnd_log("Error connecting to node: " + n.Id)
+			continue
+		}
+
+		blnd.clients[n.Id] = lnrpc.NewLightningClient(client)
+	}
+
+	time.Sleep(10 * time.Second)
+
+	return nil
+}
+
 func (blnd *BlastLnd) create_sim_ln_data(obj interface{}, filename string) error {
 	jsonData, err := json.MarshalIndent(obj, "", "    ")
 	if err != nil {
@@ -215,6 +341,23 @@ func (blnd *BlastLnd) create_sim_ln_data(obj interface{}, filename string) error
 
 	blnd.simln_data = jsonData
 	return nil
+}
+
+func save_port(port string) {
+	listener, err := net.Listen("tcp", "localhost:"+port)
+	if err != nil {
+		fmt.Println("Error starting TCP server:", err)
+		return
+	}
+
+	saved_ports[port] = &listener
+}
+
+func free_port(port string) {
+	listener := *saved_ports[port]
+	if err := listener.Close(); err != nil {
+		fmt.Println("Error closing the listener:", err)
+	}
 }
 
 func get_ports(used []int) ([]int, string, string) {
@@ -391,6 +534,7 @@ func Untar(dst string, r io.Reader) error {
 
 		// if it's a file create it
 		case tar.TypeReg:
+			ensure_directory_exists(target)
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
 			if err != nil {
 				return err

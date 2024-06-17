@@ -303,13 +303,11 @@ func (s *BlastRpcServer) StopModel(ctx context.Context, request *pb.BlastStopMod
 }
 
 func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest) (*pb.BlastLoadResponse, error) {
+	err := s.blast_lnd.load_nodes(request.Sim)
 	response := &pb.BlastLoadResponse{
-		Success: true,
+		Success: err == nil,
 	}
-
-	// TODO: implement
-
-	return response, nil
+	return response, err
 }
 
 func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest) (*pb.BlastSaveResponse, error) {

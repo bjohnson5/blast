@@ -596,10 +596,16 @@ async fn load_simulation(name: String) {
         Ok(m) => m,
         Err(e) => {
             println!("{}", format!("Failed to start network: {}", e));
-            return;
+            match blast.stop_network().await {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("Failed to stop the network: {:?}", e);       
+                }
+            }
+            return
         }
     };
-/*
+
     println!("----------------------------------------------- GET NETWORK INFO -----------------------------------------------");
 
     for node_id in blast.get_nodes() {
@@ -612,13 +618,30 @@ async fn load_simulation(name: String) {
             }
         }
     }
-
-    match blast.list_peers(String::from("blast-0000")).await {
+    match blast.list_channels(String::from("blast-0000")).await {
         Ok(s) => {
-            println!("Peers Node 0000: {}", s);
+            println!("Channels Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("{}", format!("Unable to list channels: {}", e));
+        }
+    }
+
+    match blast.list_channels(String::from("blast-0001")).await {
+        Ok(s) => {
+            println!("Channels Node 0001: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to list channels: {}", e));
+        }
+    }
+
+    match blast.wallet_balance(String::from("blast-0001")).await {
+        Ok(s) => {
+            println!("Wallet Balance Node 0001: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to get wallet balance: {}", e));
         }
     }
 
@@ -631,6 +654,24 @@ async fn load_simulation(name: String) {
         }
     }
 
+    match blast.channel_balance(String::from("blast-0000")).await {
+        Ok(s) => {
+            println!("Channel Balance Node 0000: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to get wallet balance: {}", e));
+        }
+    }
+
+    match blast.channel_balance(String::from("blast-0001")).await {
+        Ok(s) => {
+            println!("Channel Balance Node 0001: {}", s);
+        },
+        Err(e) => {
+            println!("{}", format!("Unable to get wallet balance: {}", e));
+        }
+    }
+/*
     println!("----------------------------------------------- RUN SIMULATION -----------------------------------------------");
 
     // Finalize the simulation and make it ready to run
