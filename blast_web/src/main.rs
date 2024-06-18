@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    println!("BLAST WEB UI COMING SOON");
 }

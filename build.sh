@@ -23,3 +23,7 @@ cd blast_web
 cargo build
 cd -
 
+# Build the Example
+cd blast_example
+cargo build
+cd -

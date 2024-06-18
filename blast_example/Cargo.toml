@@ -1,0 +1,11 @@
+[package]
+name = "blast_example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+blast_core = { path = "../blast_core" }
+tokio = { version = "1.37.0", features = ["full"] }
+ctrlc = "3.3.0"
+anyhow = { version = "1.0.69", features = ["backtrace"] }
+serde_json = "1.0.104"

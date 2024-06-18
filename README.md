@@ -29,6 +29,7 @@ BLAST development will all take place in this repository and will be broken down
 # Repo Tour
 - `blast_cli` - The CLI for running blast
 - `blast_core`- The core simulation library
+- `blast_example` - An example of how to use the `blast_core` library (a functional test)
 - `blast_models` - The node models
 - `blast_proto` - The BLAST RPC protocol definition
 - `blast_web` - The web interface for running blast
@@ -74,4 +75,15 @@ git clone git@github.com:bjohnson5/blast.git
 > There is no web application yet. This is an empty project right now.
 ```bash
 ./run_web.sh
+```
+### Run Example Simulation
+> To run the hard coded test simulation from scratch:
+```bash
+./run_example.sh
+```
+
+> After running the example simulation 2 simulations will be saved (`test1` and `test2`). To run these test simulations again:
+```bash
+./run_example.sh test1
+./run_example.sh test2
 ```

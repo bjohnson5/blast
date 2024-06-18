@@ -30,3 +30,9 @@ cd blast_web
 cargo clean
 rm Cargo.lock
 cd -
+
+# Clean the Example
+cd blast_example
+cargo clean
+rm Cargo.lock
+cd -
