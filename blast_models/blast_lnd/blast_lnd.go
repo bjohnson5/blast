@@ -70,6 +70,11 @@ type SimJsonFile struct {
 	Nodes []SimLnNode `json:"nodes"`
 }
 
+type ChannelPoint struct {
+	FundingTxid []byte
+	OutputIndex uint32
+}
+
 type BlastLnd struct {
 	clients          map[string]lnrpc.LightningClient
 	listen_addresses map[string]string
@@ -78,6 +83,7 @@ type BlastLnd struct {
 	shutdown_ch      chan struct{}
 	home_dir         string
 	data_dir         string
+	open_channels    map[string]ChannelPoint
 	wg               *sync.WaitGroup
 }
 
@@ -108,7 +114,7 @@ func main() {
 
 	blast_data_dir := dir + "/blast_data"
 
-	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, home_dir: dir, data_dir: blast_data_dir, wg: &wg}
+	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, home_dir: dir, data_dir: blast_data_dir, open_channels: make(map[string]ChannelPoint), wg: &wg}
 	server := start_grpc_server(&wg, &blast_lnd)
 
 	wg.Add(1)
@@ -295,7 +301,6 @@ func (blnd *BlastLnd) load_nodes(simname string) error {
 	blnd.simln_data = jsonData
 
 	for _, n := range node_list.Nodes {
-		blast_lnd_log(n.Id)
 		var tlsCreds credentials.TransportCredentials
 		tlsCreds, err = credentials.NewClientTLSFromFile(n.Cert, "")
 		if err != nil {
@@ -307,7 +312,7 @@ func (blnd *BlastLnd) load_nodes(simname string) error {
 			grpc.WithBlock(),
 			grpc.WithTransportCredentials(tlsCreds),
 		}
-		blast_lnd_log(n.Address)
+
 		client, err := grpc.Dial(n.Address, opts...)
 		if err != nil {
 			blast_lnd_log("Error connecting to node: " + n.Id)
@@ -340,6 +345,43 @@ func (blnd *BlastLnd) create_sim_ln_data(obj interface{}, filename string) error
 	}
 
 	blnd.simln_data = jsonData
+	return nil
+}
+
+func (blnd *BlastLnd) save_channels(filename string) error {
+	// Convert the map to a JSON string
+	data, err := json.Marshal(blnd.open_channels)
+	if err != nil {
+		return err
+	}
+
+	// Write the JSON string to the file
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (blnd *BlastLnd) load_channels(filename string) error {
+	// Read the JSON file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// Create a map to hold the data
+	m := make(map[string]ChannelPoint)
+
+	// Unmarshal the JSON data into the map
+	err = json.Unmarshal(data, &m)
+	if err != nil {
+		return err
+	}
+
+	blnd.open_channels = m
+
 	return nil
 }
 
@@ -554,7 +596,7 @@ func Untar(dst string, r io.Reader) error {
 
 func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 	server := grpc.NewServer()
-	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd, open_channels: make(map[int64]*lnrpc.ChannelPoint)})
+	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd})
 
 	address := "localhost:5050"
 	listener, err := net.Listen("tcp", address)

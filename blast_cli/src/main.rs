@@ -671,7 +671,7 @@ async fn load_simulation(name: String) {
             println!("{}", format!("Unable to get wallet balance: {}", e));
         }
     }
-/*
+
     println!("----------------------------------------------- RUN SIMULATION -----------------------------------------------");
 
     // Finalize the simulation and make it ready to run
@@ -708,7 +708,7 @@ async fn load_simulation(name: String) {
             println!("Error waiting for simulation to stop");
         }
     }
-*/
+
     // Pause and let the network still run until ENTER is pressed
     // Pressing ENTER instead of waiting for CtrlC allows the lnd nodes to be shutdown by a graceful RPC call and not the os signal
     // The lnd nodes are running as children and will process the INTERRUPT signal and shutdown

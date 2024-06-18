@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strconv"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 
@@ -13,8 +14,7 @@ import (
 
 type BlastRpcServer struct {
 	pb.UnimplementedBlastRpcServer
-	blast_lnd     *BlastLnd
-	open_channels map[int64]*lnrpc.ChannelPoint
+	blast_lnd *BlastLnd
 }
 
 func (s *BlastRpcServer) StartNodes(ctx context.Context, request *pb.BlastStartRequest) (*pb.BlastStartResponse, error) {
@@ -171,7 +171,7 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 					switch rpcUpdate.Update.(type) {
 					case *lnrpc.OpenStatusUpdate_ChanPending:
 					case *lnrpc.OpenStatusUpdate_ChanOpen:
-						s.open_channels[request.ChannelId] = rpcUpdate.GetChanOpen().ChannelPoint
+						s.blast_lnd.open_channels[strconv.Itoa(int(request.ChannelId))] = ChannelPoint{FundingTxid: rpcUpdate.GetChanOpen().ChannelPoint.GetFundingTxidBytes(), OutputIndex: rpcUpdate.GetChanOpen().ChannelPoint.OutputIndex}
 						return
 					case *lnrpc.OpenStatusUpdate_PsbtFund:
 					}
@@ -189,16 +189,17 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 		Success: false,
 	}
 
-	var chan_point *lnrpc.ChannelPoint
-	if val, ok := s.open_channels[request.ChannelId]; ok {
-		chan_point = val
+	var chan_point lnrpc.ChannelPoint
+	if val, ok := s.blast_lnd.open_channels[strconv.Itoa(int(request.ChannelId))]; ok {
+		funtx := lnrpc.ChannelPoint_FundingTxidBytes{FundingTxidBytes: val.FundingTxid}
+		chan_point = lnrpc.ChannelPoint{FundingTxid: &funtx, OutputIndex: val.OutputIndex}
 	} else {
 		return response, err_val
 	}
 
 	err_val = errors.New("could not find node connection")
 	if client, ok := s.blast_lnd.clients[request.Node]; ok {
-		req := &lnrpc.CloseChannelRequest{ChannelPoint: chan_point}
+		req := &lnrpc.CloseChannelRequest{ChannelPoint: &chan_point}
 		ctx := context.Background()
 		_, err := client.CloseChannel(ctx, req)
 		if err != nil {
@@ -206,7 +207,7 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 		} else {
 			err_val = nil
 			response.Success = true
-			delete(s.open_channels, request.ChannelId)
+			delete(s.blast_lnd.open_channels, strconv.Itoa(int(request.ChannelId)))
 		}
 	}
 
@@ -307,6 +308,14 @@ func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest)
 	response := &pb.BlastLoadResponse{
 		Success: err == nil,
 	}
+
+	sim_dir := s.blast_lnd.data_dir + "/../blast_sims/"
+
+	err = s.blast_lnd.load_channels(sim_dir + request.Sim + "_channels.json")
+	if err != nil {
+		return response, err
+	}
+
 	return response, err
 }
 
@@ -327,6 +336,11 @@ func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest)
 	}
 
 	err = Tar(s.blast_lnd.data_dir, sim_archive)
+	if err != nil {
+		return response, err
+	}
+
+	err = s.blast_lnd.save_channels(sim_dir + request.Sim + "_channels.json")
 	if err != nil {
 		return response, err
 	}

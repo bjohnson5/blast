@@ -200,13 +200,12 @@ impl Blast {
         self.blast_event_manager.set_event_json(&events_path)?;
   
         // Get simln
-        // TODO: activity serialize/deserialize not working
-        //let mut simln_path: String = sim_dir.to_owned();
-        //simln_path.push_str("/");
-        //simln_path.push_str(sim_name);
-        //simln_path.push_str("/");
-        //simln_path.push_str("simln.json");
-        //self.blast_simln_manager.set_simln_json(&simln_path);
+        let mut simln_path: String = sim_dir.to_owned();
+        simln_path.push_str("/");
+        simln_path.push_str(sim_name);
+        simln_path.push_str("/");
+        simln_path.push_str("simln.json");
+        self.blast_simln_manager.set_simln_json(&simln_path)?;
 
         // Load bitcoind
         let mut path: String = sim_dir.to_owned();
