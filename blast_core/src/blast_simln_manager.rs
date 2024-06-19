@@ -1,9 +1,12 @@
+// Standard libraries
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::BufReader;
+use std::fs;
 
+// Extra dependencies
 use serde::{Serialize, Deserialize};
 use sim_lib::ActivityDefinition;
 use sim_lib::Simulation;
@@ -16,15 +19,23 @@ use anyhow::{anyhow, Error};
 use bitcoin::secp256k1::PublicKey;
 use tokio::sync::Mutex;
 
+/// The expected payment amount for the sim-ln simulation
 pub const EXPECTED_PAYMENT_AMOUNT: u64 = 3_800_000;
+
+/// The activity multiplier for the sim-ln simulation
 pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
 
+/// The directory to write the sim-ln results to
+pub const RESULTS_DIR: &str = "/home/blast_results";
+
+/// The BlastSimLnManager holds the main sim-ln Simulation object and the current node and activity data that sim-ln uses
 #[derive(Clone)]
 pub struct BlastSimLnManager {
     sim: Option<Simulation>,
     data: BlastSimLnData
 }
 
+/// The BlastSimLnData is the live objects that are created from the sim-ln json file
 #[derive(Serialize, Deserialize, Clone)]
 struct BlastSimLnData {
     nodes: Vec<NodeConnection>,
@@ -32,6 +43,7 @@ struct BlastSimLnData {
 }
 
 impl BlastSimLnManager {
+    /// Create a new sim-ln manager without any nodes or activity
     pub fn new() -> Self {
         let data = BlastSimLnData {
             activity: Vec::<ActivityParser>::new(),
@@ -46,13 +58,13 @@ impl BlastSimLnManager {
         simln
     }
 
-    /// Create payment activity for the simulation.
+    /// Create payment activity for the simulation
     pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
         let a = ActivityParser{source: NodeId::Alias(String::from(source)), destination: NodeId::Alias(String::from(destination)), start_secs: start_secs, count: count, interval_secs: ValueOrRange::Value(interval_secs), amount_msat: ValueOrRange::Value(amount_msat)};
         self.data.activity.push(a);
     }
 
-    /// Add nodes from a json string returned by the model.
+    /// Add nodes from a json string returned by the model
     pub fn add_nodes(&mut self, s: String) -> Result<(), String> {
         let SimParams { mut nodes, .. } = match serde_json::from_str(&s) {
             Ok(sp) => sp,
@@ -63,7 +75,7 @@ impl BlastSimLnManager {
         Ok(())
     }
 
-    /// Get simln json data.
+    /// Get simln json data
     pub fn get_simln_json(&self) -> Result<String, String> {
         match serde_json::to_string(&self.data) {
             Ok(s) => Ok(s),
@@ -71,7 +83,7 @@ impl BlastSimLnManager {
         }
     }
 
-    /// Set the simln data from a json file.
+    /// Set the simln data from a json file
     pub fn set_simln_json(&mut self, path: &str) -> Result<(), String> {
         let file = match File::open(path) {
             Ok(f) => f,
@@ -87,7 +99,7 @@ impl BlastSimLnManager {
         Ok(())
     }
 
-    /// Create a simln simulation from the json data blast gets from each model in the sim.
+    /// Create a simln simulation from the json data blast gets from each model in the sim
     pub async fn setup_simln(&mut self) -> Result<(), anyhow::Error> {
         let nodes = self.data.nodes.clone();
         let activity = self.data.activity.clone();
@@ -180,8 +192,7 @@ impl BlastSimLnManager {
             EXPECTED_PAYMENT_AMOUNT,
             ACTIVITY_MULTIPLIER,
             Some(WriteResults {
-                // TODO: remove hard coded values
-                results_dir: PathBuf::from(String::from("/home/simln_results")),
+                results_dir: PathBuf::from(String::from(RESULTS_DIR)),
                 batch_size: 1,
             })
         );
@@ -192,6 +203,14 @@ impl BlastSimLnManager {
     /// Run SimLn simulation
     pub async fn start(&self) -> Result<(), Error> {
         log::info!("BlastSimlnManager starting simulation.");
+
+        // Create the results directory if it does not exist
+        match fs::create_dir_all(RESULTS_DIR) {
+            Ok(_) => {},
+            Err(e) => return Err(anyhow!("Error creating results directory: {}", e))
+        };
+
+        // Start the sim-ln simulation
         match &self.sim {
             Some(s) => {
                 s.run().await?;
@@ -210,7 +229,7 @@ impl BlastSimLnManager {
         };
     }
 
-    /// Get all the nodes.
+    /// Get all the nodes
     pub fn get_nodes(&self) -> Vec<String> {
         let mut ids = Vec::<String>::new();
         for n in &self.data.nodes {

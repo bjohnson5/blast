@@ -1,3 +1,4 @@
+// Standard libraries
 use std::process::{Command, Child};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::fs::File;
 use std::io::Write;
 use std::io::BufReader;
 
+// Extra dependencies
 use bitcoincore_rpc::Auth;
 use bitcoincore_rpc::RpcApi;
 use simple_logger::SimpleLogger;
@@ -24,12 +26,25 @@ use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
 use tar::Archive;
 
+// Blast libraries
 mod blast_model_manager;
 use crate::blast_model_manager::*;
 mod blast_event_manager;
 use crate::blast_event_manager::*;
 mod blast_simln_manager;
 use crate::blast_simln_manager::*;
+
+/// The RPC address for the bitcoind instance that is running
+pub const BITCOIND_RPC: &str = "http://127.0.0.1:18443/";
+
+/// The bitcoind RPC user
+pub const BITCOIND_USER: &str = "user";
+
+/// The bitcoind RPC password
+pub const BITCOIND_PASS: &str = "pass";
+
+/// The directory to save simulations in
+pub const BLAST_SIM_DIR: &str = "/home/blast_sims";
 
 /// The Blast struct is the main public interface that can be used to run a simulation.
 pub struct Blast {
@@ -56,12 +71,13 @@ impl Blast {
         .init()
         .unwrap();
 
+        // Create the blast object
         let blast = Blast {
             blast_model_manager: BlastModelManager::new(),
             blast_event_manager: BlastEventManager::new(),
             blast_simln_manager: BlastSimLnManager::new(),
             network: None,
-            bitcoin_rpc: match Client::new("http://127.0.0.1:18443/", Auth::UserPass(String::from("user"), String::from("pass"))) {
+            bitcoin_rpc: match Client::new(BITCOIND_RPC, Auth::UserPass(String::from(BITCOIND_USER), String::from(BITCOIND_PASS))) {
                 Ok(c) => Some(c),
                 Err(_) => None
             }
@@ -70,10 +86,11 @@ impl Blast {
         blast
     }
 
-    /// Create a new network from scratch.
+    /// Create a new network from scratch
     pub async fn create_network(&mut self, name: &str, model_map: HashMap<String, i32>, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
         log::info!("Creating BLAST Network");
 
+        // Start bitcoind
         let mut command = Command::new("bash");
         let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
         script_file.push_str("/start_bitcoind.sh");
@@ -83,13 +100,14 @@ impl Blast {
             Err(e) => return Err(format!("Could not start bitcoind: {}", e)),
         };
 
+        // Create the blast network
         self.network = Some(BlastNetwork{name: String::from(name), model_map: model_map});
-
         let net = match &self.network {
             Some(n) => n,
             None => return Err(format!("No network found")),
         };
 
+        // Start the models and nodes
         let mut child_list: Vec<Child> = Vec::new();
         for (key, value) in net.model_map.clone().into_iter() {
             let child = self.start_model(key.clone(), running.clone()).await?;
@@ -103,19 +121,22 @@ impl Blast {
         Ok(child_list)
     }
 
-    /// Shutdown the simulation network. This will shutdown the models and nodes.
+    /// Shutdown the simulation network -- this will shutdown the models and nodes
     pub async fn stop_network(&mut self) -> Result<(), String> {
         log::info!("Stopping BLAST Network");
 
+        // Get the blast network
         let net = match &self.network {
             Some(n) => n,
             None => return Err(format!("No network found")),
         };
 
+        // Stop the models (each model should shutdown all its nodes)
         for (key, _) in net.model_map.clone().into_iter() {
             self.stop_model(key).await?
         }
 
+        // Stop bitcoind
         let mut command = Command::new("bash");
         let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
         script_file.push_str("/stop_bitcoind.sh");
@@ -128,7 +149,7 @@ impl Blast {
         Ok(())
     }
 
-    /// Gets the simulation ready to run.
+    /// Gets the simulation ready to run by creating a sim-ln simulation
     pub async fn finalize_simulation(&mut self) -> Result<(), String> {
         log::info!("Finalizing BLAST Simulation");
 
@@ -140,7 +161,7 @@ impl Blast {
         Ok(())
     }
 
-    /// Start the simulation. This will start the simulation events and the simln transaction generation.
+    /// Start the simulation -- this will start the simulation events and the simln transaction generation
     pub async fn start_simulation(&mut self) -> Result<JoinSet<Result<(),Error>>, String> {
         let net = match &self.network {
             Some(n) => n,
@@ -158,25 +179,25 @@ impl Blast {
         let mut model_man = self.blast_model_manager.clone();
         let (sender, receiver) = mpsc::channel(1);
 
+        // Start the simln thread
         sim_tasks.spawn(async move {
-            // Start the simln thread
             simln_man.start().await
         });
 
+        // Start the event thread
         sim_tasks.spawn(async move {
-            // Start the event thread
             event_man.start(sender).await
         });
 
+        // Start the model manager thread
         sim_tasks.spawn(async move {
-            // Start the model manager thread
             model_man.process_events(receiver).await
         });
 
         Ok(sim_tasks)
     }
 
-    /// Stop the simulation. This will stop the simulation events and the simln transaction generation.
+    /// Stop the simulation -- this will stop the simulation events and the simln transaction generation
     pub fn stop_simulation(&mut self) {
         log::info!("Stopping BLAST Simulation");
 
@@ -187,12 +208,12 @@ impl Blast {
         self.blast_simln_manager.stop();
     }
 
-    /// Load a simulation. This will load a saved simulation network (nodes, channels, balance) and load events/activity.
-    pub async fn load(&mut self, sim_name: &str, sim_dir: &str, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
+    /// Load a simulation -- this will load a saved simulation network (nodes, channels, balance) and load events/activity
+    pub async fn load(&mut self, sim_name: &str, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
         log::info!("Loading BLAST Simulation");
 
         // Get events
-        let mut events_path: String = sim_dir.to_owned();
+        let mut events_path: String = BLAST_SIM_DIR.to_owned();
         events_path.push_str("/");
         events_path.push_str(sim_name);
         events_path.push_str("/");
@@ -200,7 +221,7 @@ impl Blast {
         self.blast_event_manager.set_event_json(&events_path)?;
   
         // Get simln
-        let mut simln_path: String = sim_dir.to_owned();
+        let mut simln_path: String = BLAST_SIM_DIR.to_owned();
         simln_path.push_str("/");
         simln_path.push_str(sim_name);
         simln_path.push_str("/");
@@ -208,7 +229,7 @@ impl Blast {
         self.blast_simln_manager.set_simln_json(&simln_path)?;
 
         // Load bitcoind
-        let mut path: String = sim_dir.to_owned();
+        let mut path: String = BLAST_SIM_DIR.to_owned();
         path.push_str("/");
         path.push_str(sim_name);
         path.push_str("/");
@@ -235,7 +256,7 @@ impl Blast {
         };
         
         // Get network from models.json file
-        let mut models_path: String = sim_dir.to_owned();
+        let mut models_path: String = BLAST_SIM_DIR.to_owned();
         models_path.push_str("/");
         models_path.push_str(sim_name);
         models_path.push_str("/");
@@ -262,12 +283,12 @@ impl Blast {
         Ok(child_list)
     }
 
-    /// Save a simulation. This will save off the current simulation network (nodes, channels, balances) and save events/activity.
-    pub async fn save(&mut self, sim_name: &str, sim_dir: &str) -> Result<(), String> {
+    /// Save a simulation -- this will save off the current simulation network (nodes, channels, balances) and save events/activity
+    pub async fn save(&mut self, sim_name: &str) -> Result<(), String> {
         log::info!("Saving BLAST Simulation");
 
-        // Create folder for sim_name in sim_dir
-        let mut path: String = sim_dir.to_owned();
+        // Create folder for sim_name in the simulation directory
+        let mut path: String = BLAST_SIM_DIR.to_owned();
         path.push_str("/");
         path.push_str(sim_name);
         path.push_str("/");
@@ -284,18 +305,20 @@ impl Blast {
         Ok(())
     }
 
+    /// Save the modes that are running for this simulation
     async fn save_models(&mut self, sim_name: &str, path: &str) -> Result<(), String> {
-
+        // Get the blast network
         let net = match &self.network {
             Some(n) => n,
             None => return Err(format!("No network found")),
         };
 
+        // Tell all of the models to save their state
         for (key, _) in net.model_map.clone().into_iter() {
             self.blast_model_manager.save_model(key, sim_name.to_owned()).await?
         }
 
-        // Create models.json file that contains the active model names and save it to sim_dir/sim_name
+        // Create models.json file that contains the active model names and save it to BLAST_SIM_DIR/sim_name
         let json = match serde_json::to_string(&self.network.clone().unwrap()) {
             Ok(s) => s,
             Err(e) => return Err(format!("Error getting models data: {}", e))
@@ -314,8 +337,9 @@ impl Blast {
         }
     }
 
+    /// Save the bitcoind base layer data
     fn save_bitcoin(&self, path: &str) -> Result<(), String> {
-        // Zip up the ~/.bitcoin directory and copy it to sim_dir/sim_name
+        // Zip up the ~/.bitcoin directory and copy it to BLAST_SIM_DIR/sim_name
         let mut tarfile = path.to_owned();
         tarfile.push_str("bitcoin.tar.gz");
         let tar_gz = match File::create(&tarfile) {
@@ -332,7 +356,7 @@ impl Blast {
         }
     }
 
-    /// Create simln.json that contains the full simln data and copy it to sim_dir/sim_name
+    /// Create simln.json that contains the full simln data and copy it to BLAST_SIM_DIR/sim_name
     fn save_simln(&self, path: &str) -> Result<(), String> {
         let json = self.blast_simln_manager.get_simln_json()?;
 
@@ -349,7 +373,7 @@ impl Blast {
         }
     }
 
-    // Create events.json that contains the list of events and copyt it to sim_dir/sim_name
+    // Create events.json that contains the list of events and copyt it to BLAST_SIM_DIR/sim_name
     fn save_events(&self, path: &str) -> Result<(), String> {
         let json = self.blast_event_manager.get_event_json()?;
 
@@ -366,22 +390,22 @@ impl Blast {
         }
     }
 
-    /// Create payment activity for the simulation.
+    /// Create payment activity for the simulation
     pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
         self.blast_simln_manager.add_activity(source, destination, start_secs, count, interval_secs, amount_msat);
     }
 
-    /// Create an event for the simulation.
+    /// Create an event for the simulation
     pub fn add_event(&mut self, frame_num: u64, event: &str, args: Option<Vec<String>>) -> Result<(), String> {
         self.blast_event_manager.add_event(frame_num, event, args)
     }
 
-    /// Get all the nodes.
+    /// Get all the nodes
     pub fn get_nodes(&self) -> Vec<String> {
         self.blast_simln_manager.get_nodes()
     }
 
-    /// Get the public key of a node.
+    /// Get the public key of a node
     pub async fn get_pub_key(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_manager.get_pub_key(node_id).await {
             Ok(s) => Ok(s),
@@ -389,7 +413,7 @@ impl Blast {
         }
     }
 
-    /// Get the peers of a node.
+    /// Get the peers of a node
     pub async fn list_peers(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_manager.list_peers(node_id).await {
             Ok(s) => Ok(s),
@@ -397,7 +421,7 @@ impl Blast {
         }
     }
 
-    /// Show this nodes on-chain balance.
+    /// Show this nodes on-chain balance
     pub async fn wallet_balance(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_manager.wallet_balance(node_id).await {
             Ok(s) => Ok(s),
@@ -405,7 +429,7 @@ impl Blast {
         }
     }
 
-    /// Show this nodes off-chain balance.
+    /// Show this nodes off-chain balance
     pub async fn channel_balance(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_manager.channel_balance(node_id).await {
             Ok(s) => Ok(s),
@@ -413,7 +437,7 @@ impl Blast {
         }
     }
 
-    /// View open channels on this node.
+    /// View open channels on this node
     pub async fn list_channels(&mut self, node_id: String) -> Result<String, String> {
         match self.blast_model_manager.list_channels(node_id).await {
             Ok(s) => Ok(s),
@@ -421,7 +445,7 @@ impl Blast {
         }
     }
 
-    /// Open a channel and optionally mine blocks to confirm the channel.
+    /// Open a channel and optionally mine blocks to confirm the channel
     pub async fn open_channel(&mut self, node1_id: String, node2_id: String, amount: i64, push_amount: i64, chan_id: i64, confirm: bool) -> Result<(), String> {
         match self.blast_model_manager.open_channel(node1_id, node2_id, amount, push_amount, chan_id).await {
             Ok(_) => {
@@ -437,7 +461,7 @@ impl Blast {
         }
     }
 
-    /// Close a channel.
+    /// Close a channel
     pub async fn close_channel(&mut self, source_id: String, chan_id: i64) -> Result<(), String> {
         match self.blast_model_manager.close_channel(source_id, chan_id).await {
             Ok(_) => Ok(()),
@@ -445,7 +469,7 @@ impl Blast {
         }
     }
 
-    /// Add a peer.
+    /// Add a peer
     pub async fn connect_peer(&mut self, node1_id: String, node2_id: String) -> Result<(), String> {
         match self.blast_model_manager.connect_peer(node1_id, node2_id).await {
             Ok(_) => Ok(()),
@@ -453,7 +477,7 @@ impl Blast {
         }
     }
 
-    /// Remove a peer.
+    /// Remove a peer
     pub async fn disconnect_peer(&mut self, node1_id: String, node2_id: String) -> Result<(), String> {
         match self.blast_model_manager.disconnect_peer(node1_id, node2_id).await {
             Ok(_) => Ok(()),
@@ -461,7 +485,7 @@ impl Blast {
         }
     }
 
-    /// Send funds to a node on-chain and optionally mines blocks to confirm that payment.
+    /// Send funds to a node on-chain and optionally mines blocks to confirm that payment
     pub async fn fund_node(&mut self, node_id: String, confirm: bool) -> Result<String, String> {
         match self.blast_model_manager.get_btc_address(node_id).await {
             Ok(a) => {
@@ -481,17 +505,17 @@ impl Blast {
         }
     }
 
-    /// Start a model by name and wait for the RPC connection to be made.
+    /// Start a model by name and wait for the RPC connection to be made
     async fn start_model(&mut self, model: String, running: Arc<AtomicBool>) -> Result<Child, String> {
         self.blast_model_manager.start_model(model, running).await
     }
 
-    /// Stop a model by name.
+    /// Stop a model by name
     async fn stop_model(&mut self, model: String) -> Result<(), String>{
         self.blast_model_manager.stop_model(model).await
     }
     
-    /// Start a given number of nodes for the given model name.
+    /// Start a given number of nodes for the given model name
     async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), String> {
         match self.blast_model_manager.start_nodes(model, num_nodes).await {
             Ok(s) => self.blast_simln_manager.add_nodes(s),
@@ -500,7 +524,7 @@ impl Blast {
     }
 }
 
-/// Mine new blocks.
+/// Mine new blocks
 pub fn mine_blocks(rpc: &mut Option<Client>, num_blocks: u64) -> Result<(), String> {
     let client = match rpc {
         Some(c) => c,

@@ -1,3 +1,4 @@
+// Standard libraries
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -6,8 +7,10 @@ use std::time::Duration;
 use std::thread;
 use std::env;
 
+// Extra dependencies
 use ctrlc;
 
+// Blast libraries
 use blast_core::Blast;
 
 #[tokio::main]
@@ -21,7 +24,7 @@ async fn main() {
 }
 
 async fn new_simulation() {
-    println!("BLAST CLI starting up...");
+    println!("BLAST starting up...");
 
     // Set up a Ctrl+C signal handler
     let running = Arc::new(AtomicBool::new(true));
@@ -72,7 +75,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_peers(String::from("blast-0000")).await {
+    match blast.list_peers(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Peers Node 0000: {}", s);
         },
@@ -81,7 +84,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_peers(String::from("blast-0001")).await {
+    match blast.list_peers(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Peers Node 0001: {}", s);
         },
@@ -90,7 +93,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.wallet_balance(String::from("blast-0000")).await {
+    match blast.wallet_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Wallet Balance Node 0000: {}", s);
         },
@@ -99,7 +102,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.wallet_balance(String::from("blast-0001")).await {
+    match blast.wallet_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Wallet Balance Node 0001: {}", s);
         },
@@ -108,7 +111,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0000")).await {
+    match blast.channel_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channel Balance Node 0000: {}", s);
         },
@@ -117,7 +120,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0001")).await {
+    match blast.channel_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channel Balance Node 0001: {}", s);
         },
@@ -126,7 +129,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_channels(String::from("blast-0000")).await {
+    match blast.list_channels(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channels Node 0000: {}", s);
         },
@@ -135,7 +138,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_channels(String::from("blast-0001")).await {
+    match blast.list_channels(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channels Node 0001: {}", s);
         },
@@ -148,28 +151,28 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- FUND / CONNECT NODES -----------------------------------------------");
 
-    match blast.fund_node(String::from("blast-0000"), true).await {
+    match blast.fund_node(String::from("blast_lnd-0000"), true).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to fund node: {}", e));
         }
     }
 
-    match blast.fund_node(String::from("blast-0001"), true).await {
+    match blast.fund_node(String::from("blast_lnd-0001"), true).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to fund node: {}", e));
         }
     }
 
-    match blast.connect_peer(String::from("blast-0000"), String::from("blast-0001")).await {
+    match blast.connect_peer(String::from("blast_lnd-0000"), String::from("blast_lnd-0001")).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to connect peers: {}", e));
         }
     }
 
-    match blast.list_peers(String::from("blast-0000")).await {
+    match blast.list_peers(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Peers Node 0000: {}", s);
         },
@@ -178,7 +181,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_peers(String::from("blast-0001")).await {
+    match blast.list_peers(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Peers Node 0001: {}", s);
         },
@@ -187,7 +190,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.wallet_balance(String::from("blast-0000")).await {
+    match blast.wallet_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Wallet Balance Node 0000: {}", s);
         },
@@ -196,7 +199,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.wallet_balance(String::from("blast-0001")).await {
+    match blast.wallet_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Wallet Balance Node 0001: {}", s);
         },
@@ -205,7 +208,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0000")).await {
+    match blast.channel_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channel Balance Node 0000: {}", s);
         },
@@ -214,7 +217,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0001")).await {
+    match blast.channel_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channel Balance Node 0001: {}", s);
         },
@@ -227,14 +230,14 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- OPEN CHANNEL -----------------------------------------------");
 
-    match blast.open_channel(String::from("blast-0000"), String::from("blast-0001"), 30000, 0, 0, true).await {
+    match blast.open_channel(String::from("blast_lnd-0000"), String::from("blast_lnd-0001"), 30000, 0, 0, true).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to open channel: {}", e));
         }
     }
 
-    match blast.list_channels(String::from("blast-0000")).await {
+    match blast.list_channels(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channels Node 0000: {}", s);
         },
@@ -243,7 +246,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_channels(String::from("blast-0001")).await {
+    match blast.list_channels(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channels Node 0001: {}", s);
         },
@@ -252,7 +255,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0000")).await {
+    match blast.channel_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channel Balance Node 0000: {}", s);
         },
@@ -261,7 +264,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0001")).await {
+    match blast.channel_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channel Balance Node 0001: {}", s);
         },
@@ -274,7 +277,7 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- ADD ACTIVITY / EVENTS -----------------------------------------------");
 
-    blast.add_activity("blast-0000", "blast-0001", 0, None, 1, 2000);
+    blast.add_activity("blast_lnd-0000", "blast_lnd-0001", 0, None, 1, 2000);
 
     let mut good_start = Vec::new();
     good_start.push(String::from("node1"));
@@ -293,7 +296,7 @@ async fn new_simulation() {
     }
 
     let mut good_close = Vec::new();
-    good_close.push(String::from("blast-0000"));
+    good_close.push(String::from("blast_lnd-0000"));
     good_close.push(String::from("0"));
     match blast.add_event(10, "CloseChannel", Some(good_close.clone())) {
         Ok(_) => {},
@@ -303,8 +306,8 @@ async fn new_simulation() {
     }
 
     let mut good_open = Vec::new();
-    good_open.push(String::from("blast-0000"));
-    good_open.push(String::from("blast-0001"));
+    good_open.push(String::from("blast_lnd-0000"));
+    good_open.push(String::from("blast_lnd-0001"));
     good_open.push(String::from("30000"));
     good_open.push(String::from("0"));
     good_open.push(String::from("0"));
@@ -320,7 +323,7 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- SAVE SIMULATION -----------------------------------------------");
 
-    match blast.save("test1", "/home/blast_sims").await {
+    match blast.save("test1").await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error saving simulation: {}", e));
@@ -375,29 +378,29 @@ async fn new_simulation() {
     thread::sleep(Duration::from_secs(5));
 
     for i in 2..=6 {
-        let param = format!("blast-000{}", i);
-        println!("Opening channel from blast-0000 -> {}", param.clone());
-        match blast.connect_peer(String::from("blast-0000"), param.clone()).await {
+        let param = format!("blast_lnd-000{}", i);
+        println!("Opening channel from blast_lnd-0000 -> {}", param.clone());
+        match blast.connect_peer(String::from("blast_lnd-0000"), param.clone()).await {
             Ok(_) => {},
             Err(e) => {
                 println!("{}", format!("Unable to connect peers: {}", e));
             }
         }
-        match blast.open_channel(String::from("blast-0000"), param.clone(), 30000, 0, i, true).await {
+        match blast.open_channel(String::from("blast_lnd-0000"), param.clone(), 30000, 0, i, true).await {
             Ok(_) => {},
             Err(e) => {
                 println!("{}", format!("Unable to open channel: {}", e));
             }
         }
 
-        blast.add_activity("blast-0000", &param.clone(), 0, None, 1, 2000);
+        blast.add_activity("blast_lnd-0000", &param.clone(), 0, None, 1, 2000);
     }
 
     // Print information about the updated network
 
     println!("----------------------------------------------- GET NETWORK INFO -----------------------------------------------");
 
-    match blast.list_peers(String::from("blast-0000")).await {
+    match blast.list_peers(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Peers Node 0000: {}", s);
         },
@@ -406,7 +409,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.list_channels(String::from("blast-0000")).await {
+    match blast.list_channels(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channels Node 0000: {}", s);
         },
@@ -415,7 +418,7 @@ async fn new_simulation() {
         }
     }
 
-    match blast.save("test2", "/home/blast_sims").await {
+    match blast.save("test2").await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error saving simulation: {}", e));
@@ -493,11 +496,11 @@ async fn new_simulation() {
     }
 
     running.store(false, Ordering::SeqCst);
-    println!("BLAST CLI shutting down...");
+    println!("BLAST shutting down...");
 }
 
 async fn load_simulation(name: String) {
-    println!("BLAST CLI starting up...");
+    println!("BLAST starting up...");
 
     // Set up a Ctrl+C signal handler
     let running = Arc::new(AtomicBool::new(true));
@@ -513,7 +516,7 @@ async fn load_simulation(name: String) {
 
     println!("----------------------------------------------- LOAD SIMULATION -----------------------------------------------");
 
-    let models = match blast.load(&name, "/home/blast_sims", running.clone()).await {
+    let models = match blast.load(&name, running.clone()).await {
         Ok(m) => m,
         Err(e) => {
             println!("{}", format!("Failed to start network: {}", e));
@@ -542,7 +545,7 @@ async fn load_simulation(name: String) {
         }
     }
 
-    match blast.list_channels(String::from("blast-0000")).await {
+    match blast.list_channels(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channels Node 0000: {}", s);
         },
@@ -551,7 +554,7 @@ async fn load_simulation(name: String) {
         }
     }
 
-    match blast.list_channels(String::from("blast-0001")).await {
+    match blast.list_channels(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channels Node 0001: {}", s);
         },
@@ -560,7 +563,7 @@ async fn load_simulation(name: String) {
         }
     }
 
-    match blast.wallet_balance(String::from("blast-0001")).await {
+    match blast.wallet_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Wallet Balance Node 0001: {}", s);
         },
@@ -569,7 +572,7 @@ async fn load_simulation(name: String) {
         }
     }
 
-    match blast.wallet_balance(String::from("blast-0000")).await {
+    match blast.wallet_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Wallet Balance Node 0000: {}", s);
         },
@@ -578,7 +581,7 @@ async fn load_simulation(name: String) {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0000")).await {
+    match blast.channel_balance(String::from("blast_lnd-0000")).await {
         Ok(s) => {
             println!("Channel Balance Node 0000: {}", s);
         },
@@ -587,7 +590,7 @@ async fn load_simulation(name: String) {
         }
     }
 
-    match blast.channel_balance(String::from("blast-0001")).await {
+    match blast.channel_balance(String::from("blast_lnd-0001")).await {
         Ok(s) => {
             println!("Channel Balance Node 0001: {}", s);
         },
@@ -667,7 +670,7 @@ async fn load_simulation(name: String) {
     }
 
     running.store(false, Ordering::SeqCst);
-    println!("BLAST CLI shutting down...");
+    println!("BLAST shutting down...");
 }
 
 fn pause() {

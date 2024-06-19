@@ -1,3 +1,4 @@
+// Standard libraries
 use std::sync::Arc;
 use std::fmt;
 use std::collections::HashMap;
@@ -6,16 +7,26 @@ use std::time::Duration;
 use std::fs::File;
 use std::io::BufReader;
 
+// Extra dependencies
 use bitcoincore_rpc::Client;
 use bitcoincore_rpc::Auth;
 use anyhow::Error;
 use tokio::sync::mpsc::Sender;
 use serde::{Serialize, Deserialize};
 
+/// The number of seconds to wait in between checking for events
 pub const FRAME_RATE: u64 = 1;
+
+/// The number of seconds in between mining events
 pub const MINE_RATE: u64 = 5;
+
+/// The number of blocks to mine for each mining event
 pub const BLOCKS_PER_MINE: u64 = 10;
 
+/// The BlastEventManager manages all of the automated events that happen during a simulation
+/// This includes events that the user adds and mining base layer blocks
+/// Contains a bitcoind RPC client so that it can generate blocks on the regtest network
+/// Contains a map of user-defined events that will be kicked off at different times throughout the simulation
 pub struct BlastEventManager {
     running: Arc<AtomicBool>,
     events: HashMap<u64,Vec<BlastEvent>>,
@@ -27,7 +38,7 @@ impl Clone for BlastEventManager {
         Self {
             running: self.running.clone(),
             events: self.events.clone(),
-            bitcoin_rpc: match Client::new("http://127.0.0.1:18443/", Auth::UserPass(String::from("user"), String::from("pass"))) {
+            bitcoin_rpc: match Client::new(crate::BITCOIND_RPC, Auth::UserPass(String::from(crate::BITCOIND_USER), String::from(crate::BITCOIND_PASS))) {
                 Ok(c) => Some(c),
                 Err(_) => None
             }
@@ -36,11 +47,12 @@ impl Clone for BlastEventManager {
 }
 
 impl BlastEventManager {
+    /// Create a new event manager with an empty events map and connect to the bitcoind RPC
     pub fn new() -> Self {
         let event_manager = BlastEventManager {
             running: Arc::new(AtomicBool::new(false)),
             events: HashMap::new(),
-            bitcoin_rpc: match Client::new("http://127.0.0.1:18443/", Auth::UserPass(String::from("user"), String::from("pass"))) {
+            bitcoin_rpc: match Client::new(crate::BITCOIND_RPC, Auth::UserPass(String::from(crate::BITCOIND_USER), String::from(crate::BITCOIND_PASS))) {
                 Ok(c) => Some(c),
                 Err(_) => None
             }
@@ -49,17 +61,19 @@ impl BlastEventManager {
         event_manager
     }
 
-    /// Start the event thread.
+    /// Start the event thread
     pub async fn start(&mut self, sender: Sender<BlastEvent>) -> Result<(), Error> {
         self.running.store(true, Ordering::SeqCst);
         let mut frame_num = 0;
         loop {
+            // Make sure the blast simulation is still running and exit when it has shutdown
             if !self.running.load(Ordering::SeqCst) {
                 break;
             }
 
             log::info!("BlastEventManager running frame number {}", frame_num);
 
+            // If it is time to mine new bocks, use the bitcoind RPC client to generate new blocks
             if frame_num % MINE_RATE == 0 {
                 match crate::mine_blocks(&mut self.bitcoin_rpc, BLOCKS_PER_MINE) {
                     Ok(_) => {},
@@ -67,6 +81,7 @@ impl BlastEventManager {
                 }
             }
 
+            // If there are events to run this frame, get the list of events and send them
             if self.events.contains_key(&frame_num) {
                 let current_events = &self.events[&frame_num];
                 let current_events_iter = current_events.iter();
@@ -78,19 +93,20 @@ impl BlastEventManager {
                 }
             }
 
+            // Wait until the next frame
             frame_num = frame_num + 1;
             tokio::time::sleep(Duration::from_secs(FRAME_RATE)).await;
         }
         Ok(())
     }
 
-    /// Stop the event thread.
+    /// Stop the event thread
     pub fn stop(&mut self) {
         log::info!("BlastEventManager stopping simulation.");
         self.running.store(false, Ordering::SeqCst);
     }
 
-    /// Get the events in json format.
+    /// Get all of the events in json format
     pub fn get_event_json(&self) -> Result<String, String> {
         match serde_json::to_string(&self.events) {
             Ok(s) => Ok(s),
@@ -98,13 +114,15 @@ impl BlastEventManager {
         }
     }
 
-    /// Set the events from a json file.
+    /// Set the events from a json file
     pub fn set_event_json(&mut self, path: &str) -> Result<(), String> {
+        // Open the json file
         let file = match File::open(path) {
             Ok(f) => f,
             Err(e) => return Err(format!("Error opening event file: {}", e))
         };
 
+        // Deserialize the json file and set the events for the event manager
         let reader = BufReader::new(file);
         self.events = match serde_json::from_reader(reader) {
             Ok(e) => e,
@@ -114,7 +132,7 @@ impl BlastEventManager {
         Ok(())
     }
 
-    /// Create an event for the simulation.
+    /// Create an event for the simulation
     pub fn add_event(&mut self, frame_num: u64, event: &str, args: Option<Vec<String>>) -> Result<(), String> {
         if let Some(e) = BlastEvent::from_str(event) {
             match e {
@@ -181,7 +199,7 @@ impl BlastEventManager {
         }
     }
 
-    // Validate that the correct args were given.
+    /// Validate that the correct args were given
     fn validate_args(&self, args: Option<Vec<String>>, event: BlastEvent) -> Result<Vec<String>, String> {
         match args {
             Some(a) => {
@@ -194,7 +212,7 @@ impl BlastEventManager {
         }
     }
 
-    /// Create an event for the simulation.
+    /// Create an event for the simulation
     fn push_event(&mut self, frame_num: u64, event: BlastEvent) {
         if self.events.contains_key(&frame_num) {
             let current_events = self.events.get_mut(&frame_num).unwrap();
@@ -207,6 +225,7 @@ impl BlastEventManager {
     }
 }
 
+/// The event types that a user can add to a simulation
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum BlastEvent {
     StartNodeEvent(String),

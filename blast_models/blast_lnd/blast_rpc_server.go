@@ -9,14 +9,19 @@ import (
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 
-	pb "blast_lnd/blast_proto" // Import your generated proto file
+	pb "blast_lnd/blast_proto"
 )
 
+// The file to save the current channels data to
+const CHANNEL_SUFFIX string = "_channels.json"
+
+// The RPC server that the blast framework will connect to
 type BlastRpcServer struct {
 	pb.UnimplementedBlastRpcServer
 	blast_lnd *BlastLnd
 }
 
+// Start a certain number of nodes
 func (s *BlastRpcServer) StartNodes(ctx context.Context, request *pb.BlastStartRequest) (*pb.BlastStartResponse, error) {
 	err := s.blast_lnd.start_nodes(int(request.NumNodes))
 	response := &pb.BlastStartResponse{
@@ -25,6 +30,7 @@ func (s *BlastRpcServer) StartNodes(ctx context.Context, request *pb.BlastStartR
 	return response, err
 }
 
+// Get the sim-ln data for this model
 func (s *BlastRpcServer) GetSimLn(ctx context.Context, request *pb.BlastSimlnRequest) (*pb.BlastSimlnResponse, error) {
 	response := &pb.BlastSimlnResponse{
 		SimlnData: s.blast_lnd.simln_data,
@@ -32,6 +38,7 @@ func (s *BlastRpcServer) GetSimLn(ctx context.Context, request *pb.BlastSimlnReq
 	return response, nil
 }
 
+// Blast requests the pub key of a node that is controlled by this model -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) GetPubKey(ctx context.Context, request *pb.BlastPubKeyRequest) (*pb.BlastPubKeyResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastPubKeyResponse{
@@ -53,6 +60,7 @@ func (s *BlastRpcServer) GetPubKey(ctx context.Context, request *pb.BlastPubKeyR
 	return response, err_val
 }
 
+// Blast requests the list of peers for a node that is controlled by this model -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastPeersRequest) (*pb.BlastPeersResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastPeersResponse{
@@ -74,6 +82,7 @@ func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastPeersRe
 	return response, err_val
 }
 
+// Blast requests the wallet balance of a node that is controlled by this model -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) WalletBalance(ctx context.Context, request *pb.BlastWalletBalanceRequest) (*pb.BlastWalletBalanceResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastWalletBalanceResponse{
@@ -95,6 +104,7 @@ func (s *BlastRpcServer) WalletBalance(ctx context.Context, request *pb.BlastWal
 	return response, err_val
 }
 
+// Blast requests the channel balance of a node that is controlled by this model -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) ChannelBalance(ctx context.Context, request *pb.BlastChannelBalanceRequest) (*pb.BlastChannelBalanceResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastChannelBalanceResponse{
@@ -116,6 +126,7 @@ func (s *BlastRpcServer) ChannelBalance(ctx context.Context, request *pb.BlastCh
 	return response, err_val
 }
 
+// Blast requests the list of channels for a node that is controlled by this model -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) ListChannels(ctx context.Context, request *pb.BlastListChannelsRequest) (*pb.BlastListChannelsResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastListChannelsResponse{
@@ -137,6 +148,7 @@ func (s *BlastRpcServer) ListChannels(ctx context.Context, request *pb.BlastList
 	return response, err_val
 }
 
+// Blast requests that a node controlled by this model opens a channel -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenChannelRequest) (*pb.BlastOpenChannelResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastOpenChannelResponse{
@@ -183,6 +195,7 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 	return response, err_val
 }
 
+// Blast requests that a node controlled by this model closes a channel -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastCloseChannelRequest) (*pb.BlastCloseChannelResponse, error) {
 	err_val := errors.New("could not find open channel")
 	response := &pb.BlastCloseChannelResponse{
@@ -214,6 +227,7 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 	return response, err_val
 }
 
+// Blast requests that a node controlled by this model connects to a peer -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastConnectRequest) (*pb.BlastConnectResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastConnectResponse{
@@ -235,6 +249,7 @@ func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastConne
 	return response, err_val
 }
 
+// Blast requests that a node controlled by this model disconnects from a peer -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
 func (s *BlastRpcServer) DisconnectPeer(ctx context.Context, request *pb.BlastDisconnectRequest) (*pb.BlastDisconnectResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastDisconnectResponse{
@@ -256,6 +271,7 @@ func (s *BlastRpcServer) DisconnectPeer(ctx context.Context, request *pb.BlastDi
 	return response, err_val
 }
 
+// Get a BTC address for a node
 func (s *BlastRpcServer) GetBtcAddress(ctx context.Context, request *pb.BlastBtcAddressRequest) (*pb.BlastBtcAddressResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastBtcAddressResponse{
@@ -277,6 +293,7 @@ func (s *BlastRpcServer) GetBtcAddress(ctx context.Context, request *pb.BlastBtc
 	return response, err_val
 }
 
+// Get the listen address for a node
 func (s *BlastRpcServer) GetListenAddress(ctx context.Context, request *pb.BlastListenAddressRequest) (*pb.BlastListenAddressResponse, error) {
 	err_val := errors.New("could not find node connection")
 	response := &pb.BlastListenAddressResponse{
@@ -291,6 +308,7 @@ func (s *BlastRpcServer) GetListenAddress(ctx context.Context, request *pb.Blast
 	return response, err_val
 }
 
+// Shutdown the nodes
 func (s *BlastRpcServer) StopModel(ctx context.Context, request *pb.BlastStopModelRequest) (*pb.BlastStopModelResponse, error) {
 	for _, client := range s.blast_lnd.clients {
 		req := &lnrpc.StopRequest{}
@@ -303,15 +321,16 @@ func (s *BlastRpcServer) StopModel(ctx context.Context, request *pb.BlastStopMod
 	return response, nil
 }
 
+// Load a previous state of this model
 func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest) (*pb.BlastLoadResponse, error) {
-	err := s.blast_lnd.load_nodes(request.Sim)
+	sim_dir := SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+
+	err := s.blast_lnd.load_nodes(sim_dir + request.Sim + ".tar.gz")
 	response := &pb.BlastLoadResponse{
 		Success: err == nil,
 	}
 
-	sim_dir := s.blast_lnd.data_dir + "/../blast_sims/"
-
-	err = s.blast_lnd.load_channels(sim_dir + request.Sim + "_channels.json")
+	err = s.blast_lnd.load_channels(sim_dir + request.Sim + CHANNEL_SUFFIX)
 	if err != nil {
 		return response, err
 	}
@@ -319,12 +338,13 @@ func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest)
 	return response, err
 }
 
+// Save this models current state
 func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest) (*pb.BlastSaveResponse, error) {
 	response := &pb.BlastSaveResponse{
 		Success: false,
 	}
 
-	sim_dir := s.blast_lnd.data_dir + "/../blast_sims/"
+	sim_dir := SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
 
 	if _, err := os.Stat(sim_dir); os.IsNotExist(err) {
 		os.MkdirAll(sim_dir, 0700)
@@ -340,7 +360,7 @@ func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest)
 		return response, err
 	}
 
-	err = s.blast_lnd.save_channels(sim_dir + request.Sim + "_channels.json")
+	err = s.blast_lnd.save_channels(sim_dir + request.Sim + CHANNEL_SUFFIX)
 	if err != nil {
 		return response, err
 	}
