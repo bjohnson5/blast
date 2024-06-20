@@ -1,0 +1,2 @@
+# Reproducible Simulations
+The ultimate goal of `blast` is to allow users to create large scale test networks that can be automated and easily reproduced. To enable this, we need to develop ways of saving a test network state and quickly loading that state back so that the same simulation can be repeated.

@@ -74,7 +74,7 @@ When using the `pprof` tool you can use the `-inuse_space` flag or the `-alloc_s
 
 This showed that creating encryption keys during the node startup requires a lot of memory. I started experimenting with ways to reduce this memory requirement.
 
-A full write up about the LND profiling work can be found [here](https://github.com/bjohnson5/blast/blob/main/research/lnd/README.md).
+A full write up about the LND profiling work can be found [here](https://github.com/bjohnson5/blast/blob/main/research/phase1/lnd/README.md).
 
 ## Met with `warnet` and `sim-ln` Developers to Discuss Collaboration
 Early on in this quarter, I had the opportunity to meet with developers of two new Lightning Network simulation projects, [warnet](https://github.com/bitcoin-dev-project/warnet) and [sim-ln](https://github.com/bitcoin-dev-project/sim-ln) to explore potential similarities and collaboration opportunities between our respective projects. During the meeting, I engaged in discussions on the similarities between our projects and identified areas where collaboration could be possible. Since the meeting, I have maintained communication with contributors of `sim-ln`, actively participating in the weekly Discord update thread, engaging in discussions on GitHub regarding code changes, and ultimately making a meaningful contribution to `sim-ln`. This ongoing collaboration reflects our shared commitment to advancing Lightning Network Modeling and Simulation projects and leveraging collective expertise for the betterment of our projects and the broader Lightning community.
