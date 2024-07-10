@@ -53,14 +53,22 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ### Install Go
 ```bash
-wget https://go.dev/dl/go1.20.1.linux-amd64.tar.gz
+wget https://go.dev/dl/go1.22.2.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go1.22.2.linux-amd64.tar.gz
 export PATH=$PATH:/usr/local/go/bin
+```
+
+### Install Protobuf
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+export PATH=$PATH:$HOME/go/bin
 ```
 
 ### Install blast
 ```bash
 git clone git@github.com:bjohnson5/blast.git
+cd blast
 ./build.sh
 ```
 
