@@ -6,6 +6,9 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+      - name: Checkout BLAST
+        uses: actions/checkout@v4
       - name: Build All
         run: ./build.sh
