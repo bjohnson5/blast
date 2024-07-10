@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Build the models
 cd blast_models/blast_lnd
