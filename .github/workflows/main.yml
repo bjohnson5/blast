@@ -12,7 +12,10 @@ jobs:
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-          export PATH=$PATH:$HOME/go/bin
+          echo $HOME
+          ls $HOME/go/bin
+          pwd
+          echo "$HOME/go/bin" >> $GITHUB_PATH
       - name: Checkout BLAST
         uses: actions/checkout@v4
       - name: Build All
