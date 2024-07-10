@@ -10,8 +10,8 @@ jobs:
         uses: arduino/setup-protoc@v3
       - name: Installing protoc-gen-go
         run: |
-          go install github.com/golang/protobuf/protoc-gen-go
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+          go install github.com/golang/protobuf/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
       - name: Checkout BLAST
         uses: actions/checkout@v4
       - name: Build All
