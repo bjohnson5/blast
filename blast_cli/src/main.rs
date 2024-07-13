@@ -64,6 +64,10 @@ impl<T> StatefulList<T> {
         };
         self.state.select(Some(i));
     }
+
+    pub fn clear(&mut self) {
+        self.state.select(None);
+    }
 }
 
 #[derive(PartialEq,Clone)]
@@ -99,7 +103,7 @@ struct Model {
 
 impl<'a> Into<Text<'a>> for Model {
     fn into(self) -> Text<'a> {
-        Text::from(format!("{}           <{}>", self.name, self.num_nodes))
+        Text::from(format!("{}           < {} >", self.name, self.num_nodes))
     }
 }
 
@@ -111,18 +115,42 @@ struct LoadTab {
     sims: StatefulList<String>
 }
 
+#[derive(PartialEq,Clone)]
+enum ConfigureSection {
+    Command,
+    Events,
+    Channels,
+    Activity
+}
+
 struct ConfigureTab {
     input: String,
     character_index: usize,
     messages: Vec<String>,
+    events: StatefulList<String>,
+    channels: StatefulList<String>,
+    activity: StatefulList<String>,
+    current_section: ConfigureSection
 }
 
 impl ConfigureTab {
     fn new() -> Self {
+        // TODO: this is a placeholder, initialize with the actual saved simulations
+        let mut events_list: Vec<String> = Vec::new();
+        let mut channel_list: Vec<String> = Vec::new();
+        let mut activity_list: Vec<String> = Vec::new();
+        events_list.push(String::from("OpenChannel         blast_lnd0000           blast_lnd0001           10s         2000msat"));
+        channel_list.push(String::from("0           blast_lnd0003           blast_cln0000           5000msat"));
+        activity_list.push(String::from("blast_ldk0000           blast_lnd0004           2000msat            5s"));
+
         Self {
             input: String::new(),
             messages: Vec::new(),
             character_index: 0,
+            events: StatefulList::with_items(events_list),
+            channels: StatefulList::with_items(channel_list),
+            activity: StatefulList::with_items(activity_list),
+            current_section: ConfigureSection::Command
         }
     }
 
@@ -171,8 +199,48 @@ impl ConfigureTab {
     }
 }
 
+enum RunSection {
+    Events,
+    Activity,
+    Complete,
+    Stats
+}
+
 struct RunTab {
-    message: String
+    events: StatefulList<String>,
+    activity: StatefulList<String>,
+    complete: StatefulList<String>,
+    stats: StatefulList<String>,
+    current_section: RunSection,
+}
+
+impl RunTab {
+    fn new() -> Self {
+        // TODO: this is a placeholder, initialize with the actual saved simulations
+        let mut events_list: Vec<String> = Vec::new();
+        let mut activity_list: Vec<String> = Vec::new();
+        let mut complete_list: Vec<String> = Vec::new();
+        let mut stats_list: Vec<String> = Vec::new();
+        events_list.push(String::from("OpenChannel         blast_lnd0000           blast_lnd0001           10s         2000msat"));
+        events_list.push(String::from("CloseChannel        blast_lnd0000           0                       45s"));
+        activity_list.push(String::from("blast_ldk0000           blast_lnd0004           2000msat            5s"));
+        activity_list.push(String::from("blast_ldk0001           blast_lnd0005           1000msat            15s"));
+        activity_list.push(String::from("blast_ldk0002           blast_lnd0006           8000msat            10s"));
+        activity_list.push(String::from("blast_ldk0003           blast_lnd0007           5000msat            25s"));
+        complete_list.push(String::from("OpenChannel         blast_lnd0004           blast_lnd0010           1s        5000msat"));
+        complete_list.push(String::from("OpenChannel         blast_lnd0001           blast_lnd0015           5s        7000msat"));
+        stats_list.push(String::from("Number of Nodes:          15"));
+        stats_list.push(String::from("Total Payment Attempts:   76"));
+        stats_list.push(String::from("Payment Success Rate:     100%"));
+
+        Self {
+            events: StatefulList::with_items(events_list),
+            activity: StatefulList::with_items(activity_list),
+            complete: StatefulList::with_items(complete_list),
+            stats: StatefulList::with_items(stats_list),
+            current_section: RunSection::Events
+        }
+    }
 }
 
 struct BlastCli {
@@ -202,7 +270,7 @@ impl BlastCli {
             new: NewTab{models: StatefulList::with_items(model_list)},
             load: LoadTab{sims: StatefulList::with_items(sim_list)},
             config: ConfigureTab::new(),
-            run: RunTab{message: "Simulation Running".to_string()},
+            run: RunTab::new(),
             current_tab: Tab::New,
             mode: Mode::Menu
         }
@@ -314,6 +382,7 @@ fn process_new_event(cli: &mut BlastCli, key: KeyEvent) {
         // Go back to the tab menu
         KeyCode::Esc => {
             cli.mode = Mode::Menu;
+            cli.new.models.clear();
         }
         // Scroll the list of models
         KeyCode::Down => {
@@ -352,6 +421,7 @@ fn process_load_event(cli: &mut BlastCli, key: KeyEvent) {
         // Go back to the tab menu
         KeyCode::Esc => {
             cli.mode = Mode::Menu;
+            cli.load.sims.clear();
         }
         // Scroll the list of simulations
         KeyCode::Down => {
@@ -375,17 +445,29 @@ fn process_configure_event(cli: &mut BlastCli, key: KeyEvent) {
         match key.code {
             // If Enter is pressed while on the Config page, execute the current command
             KeyCode::Enter => {
+                if cli.config.current_section != ConfigureSection::Command {
+                    return;
+                }
                 let command = cli.config.input.clone();
                 if command == "stop" {
                     // If the stop command is entered, stop the network and go back to the New page
                     // TODO: stop the network
                     cli.config.messages.clear();
                     cli.current_tab = Tab::New;
+                    cli.mode = Mode::Menu;
+                    cli.new.models.clear();
+                    cli.load.sims.clear();
                 } else if command == "start" {
                     // If the start command is entered, start the simulation and go to the Run page
                     // TODO: start the simulation
                     cli.config.messages.clear();
                     cli.current_tab = Tab::Run;
+                    cli.run.events.clear();
+                    cli.run.complete.clear();
+                    cli.run.activity.clear();
+                    cli.run.stats.clear();
+                    cli.run.events.next();
+                    cli.run.current_section = RunSection::Events
                 } else {
                     // Otherwise, run the command and show the output
                     // TODO: execute the command and get the output
@@ -396,16 +478,80 @@ fn process_configure_event(cli: &mut BlastCli, key: KeyEvent) {
                 cli.config.reset_cursor();
             }
             KeyCode::Char(to_insert) => {
+                if cli.config.current_section != ConfigureSection::Command {
+                    return;
+                }
                 cli.config.enter_char(to_insert);
             }
             KeyCode::Backspace => {
+                if cli.config.current_section != ConfigureSection::Command {
+                    return;
+                }
                 cli.config.delete_char();
             }
             KeyCode::Left => {
+                if cli.config.current_section != ConfigureSection::Command {
+                    return;
+                }
                 cli.config.move_cursor_left();
             }
             KeyCode::Right => {
+                if cli.config.current_section != ConfigureSection::Command {
+                    return;
+                }
                 cli.config.move_cursor_right();
+            }
+            KeyCode::Tab => {
+                match cli.config.current_section {
+                    ConfigureSection::Command => {
+                        cli.config.current_section = ConfigureSection::Events;
+                        cli.config.input.clear();
+                        cli.config.reset_cursor();
+                        cli.config.events.next();
+                    }
+                    ConfigureSection::Events => {
+                        cli.config.current_section = ConfigureSection::Channels;
+                        cli.config.events.clear();
+                        cli.config.channels.next();
+                    }
+                    ConfigureSection::Channels => {
+                        cli.config.current_section = ConfigureSection::Activity;
+                        cli.config.channels.clear();
+                        cli.config.activity.next();
+                    }
+                    ConfigureSection::Activity => {
+                        cli.config.current_section = ConfigureSection::Command;
+                        cli.config.activity.clear();
+                    }
+                }
+            }
+            KeyCode::Up => {
+                match cli.config.current_section {
+                    ConfigureSection::Command => {}
+                    ConfigureSection::Events => {
+                        cli.config.events.previous();
+                    }
+                    ConfigureSection::Channels => {
+                        cli.config.channels.previous();
+                    }
+                    ConfigureSection::Activity => {
+                        cli.config.activity.previous();
+                    }
+                }
+            }
+            KeyCode::Down => {
+                match cli.config.current_section {
+                    ConfigureSection::Command => {}
+                    ConfigureSection::Events => {
+                        cli.config.events.next();
+                    }
+                    ConfigureSection::Channels => {
+                        cli.config.channels.next();
+                    }
+                    ConfigureSection::Activity => {
+                        cli.config.activity.next();
+                    }
+                }
             }
             _ => {}
         }
@@ -418,6 +564,62 @@ fn process_run_event(cli: &mut BlastCli, key: KeyEvent) {
         KeyCode::Char('s') => {
             // TODO: stop the simulation
             cli.current_tab = Tab::Configure;
+        }
+        KeyCode::Tab => {
+            match cli.run.current_section {
+                RunSection::Events => {
+                    cli.run.current_section = RunSection::Activity;
+                    cli.run.events.clear();
+                    cli.run.activity.next();
+                }
+                RunSection::Activity => {
+                    cli.run.current_section = RunSection::Complete;
+                    cli.run.activity.clear();
+                    cli.run.complete.next();
+                }
+                RunSection::Complete => {
+                    cli.run.current_section = RunSection::Stats;
+                    cli.run.complete.clear();
+                    cli.run.stats.next();
+                }
+                RunSection::Stats => {
+                    cli.run.current_section = RunSection::Events;
+                    cli.run.stats.clear();
+                    cli.run.events.next();
+                }
+            }
+        }
+        KeyCode::Up => {
+            match cli.run.current_section {
+                RunSection::Events => {
+                    cli.run.events.previous();
+                }
+                RunSection::Activity => {
+                    cli.run.activity.previous();
+                }
+                RunSection::Complete => {
+                    cli.run.complete.previous();
+                }
+                RunSection::Stats => {
+                    cli.run.stats.previous();
+                }
+            }
+        }
+        KeyCode::Down => {
+            match cli.run.current_section {
+                RunSection::Events => {
+                    cli.run.events.next();
+                }
+                RunSection::Activity => {
+                    cli.run.activity.next();
+                }
+                RunSection::Complete => {
+                    cli.run.complete.next();
+                }
+                RunSection::Stats => {
+                    cli.run.stats.next();
+                }
+            }
         }
         _ => {}
     }
@@ -441,7 +643,7 @@ fn ui(frame: &mut Frame, cli: &mut BlastCli) {
         Tab::New => draw_new_tab(frame, &mut cli.new, chunks[1]),
         Tab::Load => draw_load_tab(frame, &mut cli.load, chunks[1]),
         Tab::Configure => draw_configure_tab(frame, cli, chunks[1]),
-        Tab::Run => draw_run_tab(frame, &cli.run, chunks[1]),
+        Tab::Run => draw_run_tab(frame, cli, chunks[1]),
     };
 }
 
@@ -536,58 +738,84 @@ fn draw_load_tab(frame: &mut Frame, tab: &mut LoadTab, area: Rect) {
 }
 
 fn draw_configure_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
+    let l = Layout::new(
+        Direction::Vertical,
+        [Constraint::Percentage(5), Constraint::Percentage(95)],
+    )
+    .split(area);
+
     let layout1 = Layout::new(
         Direction::Horizontal,
         [Constraint::Percentage(50), Constraint::Percentage(50)],
     )
-    .split(area);
+    .split(l[1]);
 
     let layout = Layout::new(
         Direction::Vertical,
         [Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Percentage(33)],
     ).split(layout1[1]);
 
-    // TODO: these are placeholders, show the actual simulation data here
-    frame.render_widget(
-        Paragraph::new("OpenChannel         blast_lnd0000           blast_lnd0001           10s         2000msat").block(Block::bordered().title("Events")),
-        layout[0],
-    );
-    frame.render_widget(
-        Paragraph::new("0           blast_lnd0003           blast_cln0000           5000msat").block(Block::bordered().title("Channels")),
-        layout[1],
-    );
-    frame.render_widget(
-        Paragraph::new("blast_ldk0000           blast_lnd0004           2000msat            5s").block(Block::bordered().title("Activity")),
-        layout[2],
-    );
+    let e: Vec<ListItem> = cli.config.events.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let etasks = List::new(e)
+    .block(Block::bordered().title("Events"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(etasks, layout[0], &mut cli.config.events.state);
+
+    let c: Vec<ListItem> = cli.config.channels.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let ctasks = List::new(c)
+    .block(Block::bordered().title("Channels"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(ctasks, layout[1], &mut cli.config.channels.state);
+
+    let a: Vec<ListItem> = cli.config.activity.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let atasks = List::new(a)
+    .block(Block::bordered().title("Activity"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(atasks, layout[2], &mut cli.config.activity.state);
 
     let vertical = Layout::vertical([
-        Constraint::Length(1),
         Constraint::Length(3),
         Constraint::Min(1),
     ]);
-    let [help_area, input_area, messages_area] = vertical.areas(layout1[0]);
+    let [input_area, messages_area] = vertical.areas(layout1[0]);
 
     let msg = vec![
         "Use ".into(),
         "stop".bold(),
         " command to stop network, ".into(),
         "start".bold(),
-        " command to start simulation.".into(),
+        " command to start simulation, ".into(),
+        "Tab".bold(),
+        " to change sections".into()
     ];
     let text = Text::from(Line::from(msg)).patch_style(Style::default());
     let help_message = Paragraph::new(text);
-    frame.render_widget(help_message, help_area);
+    frame.render_widget(help_message, l[0]);
 
     let input = Paragraph::new(cli.config.input.as_str())
-        .style(Style::default().fg(Color::LightYellow))
+        .style(match cli.config.current_section {
+            ConfigureSection::Command => Style::default().fg(Color::LightYellow),
+            _ => Style::default(),
+        })
         .block(Block::bordered().title("Command"));
-        frame.render_widget(input, input_area);
-    #[allow(clippy::cast_possible_truncation)]
-    frame.set_cursor(
-        input_area.x + cli.config.character_index as u16 + 1,
-        input_area.y + 1,
-    );
+    frame.render_widget(input, input_area);
+
+    match cli.config.current_section {
+        ConfigureSection::Command => {
+            #[allow(clippy::cast_possible_truncation)]
+            frame.set_cursor(
+                input_area.x + cli.config.character_index as u16 + 1,
+                input_area.y + 1,
+            );
+        }
+        _ => {}
+    }
 
     let messages: Vec<ListItem> = cli.config
         .messages
@@ -602,10 +830,10 @@ fn draw_configure_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
     frame.render_widget(messages, messages_area);
 }
 
-fn draw_run_tab(frame: &mut Frame, tab: &RunTab, area: Rect) {
+fn draw_run_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
     let layout = Layout::new(
         Direction::Vertical,
-        [Constraint::Percentage(5), Constraint::Percentage(95)],
+        [Constraint::Percentage(5), Constraint::Percentage(10), Constraint::Percentage(85)],
     )
     .split(area);
 
@@ -614,16 +842,77 @@ fn draw_run_tab(frame: &mut Frame, tab: &RunTab, area: Rect) {
         "q".bold(),
         " to exit, ".into(),
         "s".bold(),
-        " to stop sim".into()
+        " to stop sim, ".into(),
+        "Tab".bold(),
+        " to change sections".into()
     ];
     let text = Text::from(Line::from(msg)).patch_style(Style::default());
     let help_message = Paragraph::new(text);
     frame.render_widget(help_message, layout[0]);
 
-    // TODO: this is a placeholder, show the simulation status as it runs here
     frame.render_widget(
-        Paragraph::new(tab.message.to_string()).block(Block::bordered().title("Status")),
+        Paragraph::new("PROGRESS").block(Block::bordered().title("Progress")),
         layout[1],
     );
-}
 
+    let layout2 = Layout::new(
+        Direction::Horizontal,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .split(layout[2]);
+
+    let layout3 = Layout::new(
+        Direction::Vertical,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .split(layout2[0]);
+
+    let layout4 = Layout::new(
+        Direction::Horizontal,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .split(layout3[0]);
+
+    let layout5 = Layout::new(
+        Direction::Vertical,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .split(layout4[0]);
+
+    let e: Vec<ListItem> = cli.run.events.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let etasks = List::new(e)
+    .block(Block::bordered().title("Events"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(etasks, layout5[0], &mut cli.run.events.state);
+
+    let a: Vec<ListItem> = cli.run.activity.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let atasks = List::new(a)
+    .block(Block::bordered().title("Activity"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(atasks,  layout5[1], &mut cli.run.activity.state);
+
+    let ce: Vec<ListItem> = cli.run.complete.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let cetasks = List::new(ce)
+    .block(Block::bordered().title("Completed Events"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(cetasks, layout4[1], &mut cli.run.complete.state);
+
+    let s: Vec<ListItem> = cli.run.stats.items.clone().iter()
+    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
+    let stasks = List::new(s)
+    .block(Block::bordered().title("Stats"))
+    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
+    .highlight_symbol("> ");
+    frame.render_stateful_widget(stasks, layout3[1], &mut cli.run.stats.state);
+
+    frame.render_widget(
+        Paragraph::new("CHART").block(Block::bordered().title("Payment Chart")),
+        layout2[1],
+    );
+}
