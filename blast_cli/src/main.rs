@@ -2,7 +2,7 @@
 // https://github.com/ratatui-org/ratatui/blob/main/examples
 // https://www.kammerl.de/ascii/AsciiSignature.php
 
-use std::{error::Error, io};
+use std::{error::Error, io, time::Instant, time::Duration};
 
 use ratatui::{
     crossterm::{
@@ -139,9 +139,9 @@ impl ConfigureTab {
         let mut events_list: Vec<String> = Vec::new();
         let mut channel_list: Vec<String> = Vec::new();
         let mut activity_list: Vec<String> = Vec::new();
-        events_list.push(String::from("OpenChannel         blast_lnd0000           blast_lnd0001           10s         2000msat"));
-        channel_list.push(String::from("0           blast_lnd0003           blast_cln0000           5000msat"));
-        activity_list.push(String::from("blast_ldk0000           blast_lnd0004           2000msat            5s"));
+        events_list.push(String::from("10s OpenChannel (blast_lnd0000 --> blast_lnd0001: 2000msat)"));
+        channel_list.push(String::from("0: blast_lnd0000 --> blast_lnd0001: 2000msat"));
+        activity_list.push(String::from("blast_ldk0000 --> blast_lnd0004: 2000msat, 5s"));
 
         Self {
             input: String::new(),
@@ -202,16 +202,17 @@ impl ConfigureTab {
 enum RunSection {
     Events,
     Activity,
-    Complete,
     Stats
 }
 
 struct RunTab {
     events: StatefulList<String>,
     activity: StatefulList<String>,
-    complete: StatefulList<String>,
     stats: StatefulList<String>,
     current_section: RunSection,
+    progress: f64,
+    window: [f64; 2],
+    success_rate_data: [(f64, f64); 21]
 }
 
 impl RunTab {
@@ -219,16 +220,13 @@ impl RunTab {
         // TODO: this is a placeholder, initialize with the actual saved simulations
         let mut events_list: Vec<String> = Vec::new();
         let mut activity_list: Vec<String> = Vec::new();
-        let mut complete_list: Vec<String> = Vec::new();
         let mut stats_list: Vec<String> = Vec::new();
-        events_list.push(String::from("OpenChannel         blast_lnd0000           blast_lnd0001           10s         2000msat"));
-        events_list.push(String::from("CloseChannel        blast_lnd0000           0                       45s"));
-        activity_list.push(String::from("blast_ldk0000           blast_lnd0004           2000msat            5s"));
-        activity_list.push(String::from("blast_ldk0001           blast_lnd0005           1000msat            15s"));
-        activity_list.push(String::from("blast_ldk0002           blast_lnd0006           8000msat            10s"));
-        activity_list.push(String::from("blast_ldk0003           blast_lnd0007           5000msat            25s"));
-        complete_list.push(String::from("OpenChannel         blast_lnd0004           blast_lnd0010           1s        5000msat"));
-        complete_list.push(String::from("OpenChannel         blast_lnd0001           blast_lnd0015           5s        7000msat"));
+        events_list.push(String::from("10s OpenChannel (blast_lnd0000 --> blast_lnd0001: 2000msat)"));
+        events_list.push(String::from("20s CloseChannel (0)"));
+        activity_list.push(String::from("blast_ldk0000 --> blast_lnd0004: 2000msat, 5s"));
+        activity_list.push(String::from("blast_ldk0001 --> blast_lnd0005: 1000msat, 15s"));
+        activity_list.push(String::from("blast_ldk0002 --> blast_lnd0006: 8000msat, 10s"));
+        activity_list.push(String::from("blast_ldk0003 --> blast_lnd0007: 5000msat, 25s"));
         stats_list.push(String::from("Number of Nodes:          15"));
         stats_list.push(String::from("Total Payment Attempts:   76"));
         stats_list.push(String::from("Payment Success Rate:     100%"));
@@ -236,9 +234,11 @@ impl RunTab {
         Self {
             events: StatefulList::with_items(events_list),
             activity: StatefulList::with_items(activity_list),
-            complete: StatefulList::with_items(complete_list),
             stats: StatefulList::with_items(stats_list),
-            current_section: RunSection::Events
+            current_section: RunSection::Events,
+            progress: 0.0,
+            window: [0.0, 20.0],
+            success_rate_data: [(0.0, 0.0); 21]
         }
     }
 }
@@ -306,73 +306,103 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::Result<()> {
+    let mut last_tick = Instant::now();
+    let tick_rate = Duration::from_millis(1000);
+    let mut add = true;
+
     loop {
         // Draw the frame
         terminal.draw(|f| ui(f, &mut blast_cli))?;
 
-        // Get the next key event
-        if let Event::Key(key) = event::read()? {
-            // If Menu mode, allow the tabs to be selected
-            if blast_cli.mode == Mode::Menu {
-                match key.code {
-                    // Quit the BlastCli
-                    KeyCode::Char('q') => {
-                        return Ok(());
-                    }
-                    // Select the current tab, so switch to Page mode
-                    KeyCode::Enter => {
-                        blast_cli.mode = Mode::Page;
-                        match blast_cli.current_tab {
-                            Tab::New => {
-                                blast_cli.new.models.next();
-                            }
-                            Tab::Load => {
-                                blast_cli.load.sims.next();
-                            }
-                            Tab::Configure => {}
-                            Tab::Run => {}
+        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
+        if event::poll(timeout)? {
+            // Get the next key event
+            if let Event::Key(key) = event::read()? {
+                // If Menu mode, allow the tabs to be selected
+                if blast_cli.mode == Mode::Menu {
+                    match key.code {
+                        // Quit the BlastCli
+                        KeyCode::Char('q') => {
+                            return Ok(());
                         }
-                    }
-                    // Choose a different tab
-                    KeyCode::Left => {
-                        if blast_cli.current_tab == Tab::Load {
-                            blast_cli.current_tab = Tab::New
+                        // Select the current tab, so switch to Page mode
+                        KeyCode::Enter => {
+                            blast_cli.mode = Mode::Page;
+                            match blast_cli.current_tab {
+                                Tab::New => {
+                                    blast_cli.new.models.next();
+                                }
+                                Tab::Load => {
+                                    blast_cli.load.sims.next();
+                                }
+                                Tab::Configure => {}
+                                Tab::Run => {}
+                            }
                         }
-                    }
-                    // Choose a different tab
-                    KeyCode::Right => {
-                        if blast_cli.current_tab == Tab::New {
-                            blast_cli.current_tab = Tab::Load
+                        // Choose a different tab
+                        KeyCode::Left => {
+                            if blast_cli.current_tab == Tab::Load {
+                                blast_cli.current_tab = Tab::New
+                            }
                         }
+                        // Choose a different tab
+                        KeyCode::Right => {
+                            if blast_cli.current_tab == Tab::New {
+                                blast_cli.current_tab = Tab::Load
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
-                }
-            } else {
-                // In Page mode, let the individual pages process the key event
-                match key.code {
-                    // Quit the BlastCli
-                    KeyCode::Char('q') => {
-                        return Ok(());
-                    }
-                    // Pass the key event to the correct page
-                    _ => {
-                        match blast_cli.current_tab {
-                            Tab::New => {
-                                process_new_event(&mut blast_cli, key);
-                            }
-                            Tab::Load => {
-                                process_load_event(&mut blast_cli, key);
-                            }
-                            Tab::Configure => {
-                                process_configure_event(&mut blast_cli, key);
-                            }
-                            Tab::Run => {
-                                process_run_event(&mut blast_cli, key);
+                } else {
+                    // In Page mode, let the individual pages process the key event
+                    match key.code {
+                        // Quit the BlastCli
+                        KeyCode::Char('q') => {
+                            return Ok(());
+                        }
+                        // Pass the key event to the correct page
+                        _ => {
+                            match blast_cli.current_tab {
+                                Tab::New => {
+                                    process_new_event(&mut blast_cli, key);
+                                }
+                                Tab::Load => {
+                                    process_load_event(&mut blast_cli, key);
+                                }
+                                Tab::Configure => {
+                                    process_configure_event(&mut blast_cli, key);
+                                }
+                                Tab::Run => {
+                                    process_run_event(&mut blast_cli, key);
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+
+        if last_tick.elapsed() >= tick_rate {
+            // TODO: update data from blast core
+            if blast_cli.current_tab == Tab::Run {
+                blast_cli.run.progress = blast_cli.run.progress + 1.0;
+                blast_cli.run.window[0] += 1.0;
+                blast_cli.run.window[1] += 1.0;
+                for i in 0..20 {
+                    blast_cli.run.success_rate_data[i] = blast_cli.run.success_rate_data[i + 1];
+                }
+
+                if add {
+                    blast_cli.run.success_rate_data[20] = (blast_cli.run.window[1], blast_cli.run.success_rate_data[19].1 + 5.0);
+                } else {
+                    blast_cli.run.success_rate_data[20] = (blast_cli.run.window[1], blast_cli.run.success_rate_data[19].1 - 5.0);
+                }
+
+                if blast_cli.run.window[1] % 10.0 == 0.0 {
+                    add = !add;
+                }
+            }
+            last_tick = Instant::now();
         }
     }
 }
@@ -462,12 +492,7 @@ fn process_configure_event(cli: &mut BlastCli, key: KeyEvent) {
                     // TODO: start the simulation
                     cli.config.messages.clear();
                     cli.current_tab = Tab::Run;
-                    cli.run.events.clear();
-                    cli.run.complete.clear();
-                    cli.run.activity.clear();
-                    cli.run.stats.clear();
                     cli.run.events.next();
-                    cli.run.current_section = RunSection::Events
                 } else {
                     // Otherwise, run the command and show the output
                     // TODO: execute the command and get the output
@@ -564,6 +589,15 @@ fn process_run_event(cli: &mut BlastCli, key: KeyEvent) {
         KeyCode::Char('s') => {
             // TODO: stop the simulation
             cli.current_tab = Tab::Configure;
+            cli.run.events.clear();
+            cli.run.activity.clear();
+            cli.run.stats.clear();
+            cli.run.events.next();
+            cli.run.current_section = RunSection::Events;
+            cli.run.progress = 0.0;
+            cli.run.window[0] = 0.0;
+            cli.run.window[1] = 20.0;
+            cli.run.success_rate_data = [(0.0, 0.0); 21];
         }
         KeyCode::Tab => {
             match cli.run.current_section {
@@ -573,13 +607,8 @@ fn process_run_event(cli: &mut BlastCli, key: KeyEvent) {
                     cli.run.activity.next();
                 }
                 RunSection::Activity => {
-                    cli.run.current_section = RunSection::Complete;
-                    cli.run.activity.clear();
-                    cli.run.complete.next();
-                }
-                RunSection::Complete => {
                     cli.run.current_section = RunSection::Stats;
-                    cli.run.complete.clear();
+                    cli.run.activity.clear();
                     cli.run.stats.next();
                 }
                 RunSection::Stats => {
@@ -597,9 +626,6 @@ fn process_run_event(cli: &mut BlastCli, key: KeyEvent) {
                 RunSection::Activity => {
                     cli.run.activity.previous();
                 }
-                RunSection::Complete => {
-                    cli.run.complete.previous();
-                }
                 RunSection::Stats => {
                     cli.run.stats.previous();
                 }
@@ -612,9 +638,6 @@ fn process_run_event(cli: &mut BlastCli, key: KeyEvent) {
                 }
                 RunSection::Activity => {
                     cli.run.activity.next();
-                }
-                RunSection::Complete => {
-                    cli.run.complete.next();
                 }
                 RunSection::Stats => {
                     cli.run.stats.next();
@@ -648,17 +671,11 @@ fn ui(frame: &mut Frame, cli: &mut BlastCli) {
 }
 
 fn draw_new_tab(frame: &mut Frame, tab: &mut NewTab, area: Rect) {
-    let layout1 = Layout::new(
-        Direction::Horizontal,
-        [Constraint::Percentage(15), Constraint::Percentage(85)],
-    )
-    .split(area);
-
     let layout = Layout::new(
         Direction::Vertical,
         [Constraint::Percentage(25), Constraint::Percentage(5), Constraint::Percentage(70)],
     )
-    .split(layout1[0]);
+    .split(area);
 
     let msg = vec![
         "Press ".into(),
@@ -693,17 +710,11 @@ fn draw_new_tab(frame: &mut Frame, tab: &mut NewTab, area: Rect) {
 }
 
 fn draw_load_tab(frame: &mut Frame, tab: &mut LoadTab, area: Rect) {
-    let layout1 = Layout::new(
-        Direction::Horizontal,
-        [Constraint::Percentage(15), Constraint::Percentage(85)],
-    )
-    .split(area);
-
     let layout = Layout::new(
         Direction::Vertical,
         [Constraint::Percentage(25), Constraint::Percentage(5), Constraint::Percentage(70)],
     )
-    .split(layout1[0]);
+    .split(area);
 
     let msg = vec![
         "Press ".into(),
@@ -850,10 +861,12 @@ fn draw_run_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
     let help_message = Paragraph::new(text);
     frame.render_widget(help_message, layout[0]);
 
-    frame.render_widget(
-        Paragraph::new("PROGRESS").block(Block::bordered().title("Progress")),
-        layout[1],
-    );
+    let line_gauge = LineGauge::default()
+        .block(Block::new().title("Simulation Progress:"))
+        .filled_style(Style::default().fg(Color::LightBlue))
+        .line_set(symbols::line::THICK)
+        .ratio(cli.run.progress/100.0);
+    frame.render_widget(line_gauge, layout[1]);
 
     let layout2 = Layout::new(
         Direction::Horizontal,
@@ -863,21 +876,9 @@ fn draw_run_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
 
     let layout3 = Layout::new(
         Direction::Vertical,
-        [Constraint::Percentage(50), Constraint::Percentage(50)],
+        [Constraint::Percentage(33), Constraint::Percentage(50), Constraint::Percentage(33)],
     )
     .split(layout2[0]);
-
-    let layout4 = Layout::new(
-        Direction::Horizontal,
-        [Constraint::Percentage(50), Constraint::Percentage(50)],
-    )
-    .split(layout3[0]);
-
-    let layout5 = Layout::new(
-        Direction::Vertical,
-        [Constraint::Percentage(50), Constraint::Percentage(50)],
-    )
-    .split(layout4[0]);
 
     let e: Vec<ListItem> = cli.run.events.items.clone().iter()
     .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
@@ -885,7 +886,7 @@ fn draw_run_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
     .block(Block::bordered().title("Events"))
     .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
     .highlight_symbol("> ");
-    frame.render_stateful_widget(etasks, layout5[0], &mut cli.run.events.state);
+    frame.render_stateful_widget(etasks, layout3[0], &mut cli.run.events.state);
 
     let a: Vec<ListItem> = cli.run.activity.items.clone().iter()
     .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
@@ -893,15 +894,7 @@ fn draw_run_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
     .block(Block::bordered().title("Activity"))
     .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
     .highlight_symbol("> ");
-    frame.render_stateful_widget(atasks,  layout5[1], &mut cli.run.activity.state);
-
-    let ce: Vec<ListItem> = cli.run.complete.items.clone().iter()
-    .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
-    let cetasks = List::new(ce)
-    .block(Block::bordered().title("Completed Events"))
-    .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
-    .highlight_symbol("> ");
-    frame.render_stateful_widget(cetasks, layout4[1], &mut cli.run.complete.state);
+    frame.render_stateful_widget(atasks,  layout3[1], &mut cli.run.activity.state);
 
     let s: Vec<ListItem> = cli.run.stats.items.clone().iter()
     .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
@@ -909,10 +902,55 @@ fn draw_run_tab(frame: &mut Frame, cli: &mut BlastCli, area: Rect) {
     .block(Block::bordered().title("Stats"))
     .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
     .highlight_symbol("> ");
-    frame.render_stateful_widget(stasks, layout3[1], &mut cli.run.stats.state);
+    frame.render_stateful_widget(stasks, layout3[2], &mut cli.run.stats.state);
 
-    frame.render_widget(
-        Paragraph::new("CHART").block(Block::bordered().title("Payment Chart")),
-        layout2[1],
-    );
+    let x_labels = vec![
+        Span::styled(
+            format!("{}", cli.run.window[0]),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!(
+            "{}",
+            (cli.run.window[0] + cli.run.window[1]) / 2.0
+        )),
+        Span::styled(
+            format!("{}", cli.run.window[1]),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+    ];
+    let datasets = vec![
+        Dataset::default()
+            .name("All")
+            .marker(symbols::Marker::Dot)
+            .style(Style::default().fg(Color::LightYellow))
+            .data(&cli.run.success_rate_data),
+    ];
+    let chart = Chart::new(datasets)
+        .block(
+            Block::bordered().title(Span::styled(
+                "Payment Chart",
+                Style::default()
+                    .fg(Color::LightBlue)
+                    .add_modifier(Modifier::BOLD),
+            )),
+        )
+        .x_axis(
+            Axis::default()
+                .title("Sim Time")
+                .style(Style::default().fg(Color::Gray))
+                .bounds(cli.run.window)
+                .labels(x_labels),
+        )
+        .y_axis(
+            Axis::default()
+                .title("Success Rate")
+                .style(Style::default().fg(Color::Gray))
+                .bounds([0.0, 100.0])
+                .labels(vec![
+                    Span::styled("0", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw("50"),
+                    Span::styled("100", Style::default().add_modifier(Modifier::BOLD)),
+                ]),
+        );
+    frame.render_widget(chart, layout2[1]);
 }
