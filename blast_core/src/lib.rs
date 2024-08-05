@@ -15,8 +15,6 @@ use std::io;
 // Extra dependencies
 use bitcoincore_rpc::Auth;
 use bitcoincore_rpc::RpcApi;
-use simple_logger::SimpleLogger;
-use log::LevelFilter;
 use anyhow::Error;
 use bitcoincore_rpc::Client;
 use tokio::task::JoinSet;
@@ -66,12 +64,6 @@ pub struct BlastNetwork {
 impl Blast {
     /// Create a new Blast object with a new BlastModelManager.
     pub fn new() -> Self {
-        // Set up the logger
-        SimpleLogger::new()
-        .with_level(LevelFilter::Info)
-        .init()
-        .unwrap();
-
         // Create the blast object
         let blast = Blast {
             blast_model_manager: BlastModelManager::new(),

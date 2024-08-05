@@ -61,7 +61,8 @@ impl<T> StatefulList<T> {
 }
 
 pub enum ProcessResult {
-    StartNetwork,
+    StartNetwork(Vec<Model>),
+    LoadNetwork(String),
     StartSim,
     StopNetwork,
     StopSim,
@@ -71,13 +72,14 @@ pub enum ProcessResult {
 #[derive(PartialEq,Clone)]
 pub enum Mode {
     Menu,
-    Page
+    Page,
+    Error
 }
 
 #[derive(Clone)]
 pub struct Model {
     pub name: String,
-    pub num_nodes: u32
+    pub num_nodes: i32
 }
 
 impl<'a> Into<Text<'a>> for Model {

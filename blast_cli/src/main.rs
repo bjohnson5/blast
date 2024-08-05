@@ -1,8 +1,13 @@
-// https://github.com/ratatui-org/ratatui
-// https://github.com/ratatui-org/ratatui/blob/main/examples
-// https://www.kammerl.de/ascii/AsciiSignature.php
-
 use std::{error::Error, io, time::Instant, time::Duration};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::process::Child;
+use std::fs::File;
+
+use simplelog::WriteLogger;
+use simplelog::Config;
+use log::LevelFilter;
 
 use ratatui::{
     crossterm::{
@@ -23,7 +28,17 @@ mod blast_cli;
 use crate::shared::*;
 use crate::blast_cli::*;
 
-fn main() -> Result<(), Box<dyn Error>> {
+/// The log file for blast
+pub const BLAST_LOG_FILE: &str = "/home/blast.log";
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let _ = WriteLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        File::create(BLAST_LOG_FILE).unwrap(),
+    );
+
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -33,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // create app and run it
     let cli = BlastCli::new();
-    let res = run(&mut terminal, cli);
+    let res = run(&mut terminal, cli).await;
 
     // restore terminal
     disable_raw_mode()?;
@@ -51,15 +66,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::Result<()> {
+async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::Result<()> {
     let mut last_tick = Instant::now();
     let tick_rate = Duration::from_millis(1000);
     let mut current: &mut dyn BlastTab = &mut blast_cli.new;
     let mut mode: Mode = Mode::Menu;
+    let mut error: Option<String> = None;
+    let running = Arc::new(AtomicBool::new(true));
+    let mut running_models: Vec<Child> = Vec::new();
 
     loop {
         // Draw the frameclear
-        terminal.draw(|f| ui(f, current))?;
+        terminal.draw(|f| ui(f, current, error.clone()))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {
@@ -91,6 +109,15 @@ fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::R
                         }
                         _ => {}
                     }
+                } else if mode == Mode::Error {
+                    match key.code {
+                        KeyCode::Enter => {
+                            mode = Mode::Page;
+                            error = None;
+                            current.init();
+                        }
+                        _ => {}
+                    }
                 } else {
                     // In Page mode, let the individual pages process the key event
                     match key.code {
@@ -107,12 +134,38 @@ fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::R
                         // Pass the key event to the correct page
                         _ => {
                             match current.process(key) {
-                                ProcessResult::StartNetwork => {
-                                    // TODO: start the network
-                                    current.close();
-                                    current = &mut blast_cli.config;
-                                    current.init();
+                                ProcessResult::StartNetwork(models) => {
+                                    let mut m = HashMap::new();
+                                    for model in models {
+                                        m.insert(model.name.clone(), model.num_nodes);
+                                    }
+                                    match blast_cli.blast.create_network("test", m, running.clone()).await {
+                                        Ok(mut m) => {
+                                            running_models.append(&mut m);
+                                            current.close();
+                                            current = &mut blast_cli.config;
+                                            current.init();
+                                        },
+                                        Err(e) => {
+                                            error = Some(e);
+                                            mode = Mode::Error;
+                                        }
+                                    };
                                 },
+                                ProcessResult::LoadNetwork(sim) => {
+                                    match blast_cli.blast.load(&sim, running.clone()).await {
+                                        Ok(mut m) => {
+                                            running_models.append(&mut m);
+                                            current.close();
+                                            current = &mut blast_cli.config;
+                                            current.init();
+                                        },
+                                        Err(e) => {
+                                            error = Some(e);
+                                            mode = Mode::Error;
+                                        }
+                                    };                                    
+                                }
                                 ProcessResult::StartSim => {
                                     // TODO: start the simulation
                                     current.close();
@@ -120,12 +173,38 @@ fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::R
                                     current.init();
                                 },
                                 ProcessResult::StopNetwork => {
-                                    // TODO: stop the network
-                                    current.close();
-                                    current = &mut blast_cli.new;
-                                    mode = Mode::Menu;
-                                    current.close();
-                                    blast_cli.load.close();
+                                    // Stop the models
+                                    match blast_cli.blast.stop_network().await {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            error = Some(e);
+                                            mode = Mode::Error;
+                                            continue;
+                                        }
+                                    }
+
+                                    // Wait for the models to stop
+                                    let mut child_err = false;
+                                    for child in &mut running_models {
+                                        match child.wait() {
+                                            Ok(_) => {},
+                                            Err(_) => {
+                                                child_err = true;
+                                            }
+                                        };
+                                    }
+
+                                    if child_err {
+                                        error = Some(String::from("Failed to cleanly shutdown all models"));
+                                        mode = Mode::Error;
+                                    } else {
+                                        running.store(false, Ordering::SeqCst);
+                                        current.close();
+                                        current = &mut blast_cli.new;
+                                        mode = Mode::Menu;
+                                        current.close();
+                                        blast_cli.load.close();
+                                    }
                                 },
                                 ProcessResult::StopSim => {
                                     // TODO: stop the simulation
@@ -148,7 +227,7 @@ fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) -> io::R
     }
 }
 
-fn ui(frame: &mut Frame, tab: &mut dyn BlastTab) {
+fn ui(frame: &mut Frame, tab: &mut dyn BlastTab, error: Option<String>) {
     let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(frame.size());
 
     // Draw the tab menu
@@ -160,7 +239,34 @@ fn ui(frame: &mut Frame, tab: &mut dyn BlastTab) {
         .highlight_style(Style::default().fg(Color::LightYellow))
         .select(tab.get_index());
     frame.render_widget(tabs, chunks[0]);
-    
-    // Draw the current page
-    tab.draw(frame, chunks[1]);
+
+    match error {
+        Some(e) => {
+            let error_msg = Paragraph::new(e.as_str())
+            .block(Block::bordered().title("Error"));
+            let area = centered_rect(60, 20, chunks[1]);
+            frame.render_widget(Clear, area);
+            frame.render_widget(error_msg, area);            
+        },
+        None => {
+            // Draw the current page
+            tab.draw(frame, chunks[1]);
+        }
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(popup_layout[1])[1]
 }

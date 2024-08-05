@@ -1,7 +1,5 @@
 use ratatui::{
-    crossterm::{
-        event::{KeyCode, KeyEvent}
-    },
+    crossterm::event::{KeyCode, KeyEvent},
     prelude::*,
     widgets::*,
 };
@@ -94,7 +92,7 @@ impl BlastTab for NewTab {
                 }
             }
             KeyCode::Enter => {
-                return ProcessResult::StartNetwork;
+                return ProcessResult::StartNetwork(self.models.items.clone());
             }
             _ => {}
         }

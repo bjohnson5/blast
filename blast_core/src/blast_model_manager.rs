@@ -12,6 +12,7 @@ use std::fs;
 use std::thread;
 use std::time::Duration;
 use std::process::Stdio;
+use std::fs::OpenOptions;
 
 // Extra dependencies
 use anyhow::Error;
@@ -26,6 +27,8 @@ use crate::blast_proto::*;
 pub mod blast_proto {
     tonic::include_proto!("blast_proto");
 }
+
+pub const BLAST_MODEL_LOG_DIR: &str = "/home/";
 
 /// The ModelConfig struct defines a blast model and it contains the information from the model.json file
 #[derive(Deserialize, Debug, Clone)]
@@ -124,7 +127,17 @@ impl BlastModelManager {
         let model_exe = current_dir.to_string_lossy().into_owned();
 
         // Run the model executable
-        let child = match Command::new(model_exe).stdout(Stdio::null())
+        let file_stderr = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(BLAST_MODEL_LOG_DIR.to_owned()+&model.config.name+".log")
+            .unwrap();
+        let file_stdout = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(BLAST_MODEL_LOG_DIR.to_owned()+&model.config.name+".log")
+            .unwrap();
+        let child = match Command::new(model_exe).stderr(Stdio::from(file_stderr)).stdout(Stdio::from(file_stdout))
         .spawn() {
             Ok(c) => c,
             Err(_) => {

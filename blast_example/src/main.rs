@@ -9,12 +9,19 @@ use std::env;
 
 // Extra dependencies
 use ctrlc;
+use simple_logger::SimpleLogger;
+use log::LevelFilter;
 
 // Blast libraries
 use blast_core::Blast;
 
 #[tokio::main]
 async fn main() {
+    SimpleLogger::new()
+    .with_level(LevelFilter::Info)
+    .init()
+    .unwrap();
+
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
         load_simulation(args[1].clone()).await;

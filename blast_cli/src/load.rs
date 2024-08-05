@@ -1,7 +1,5 @@
 use ratatui::{
-    crossterm::{
-        event::{KeyCode, KeyEvent}
-    },
+    crossterm::event::{KeyCode, KeyEvent},
     prelude::*,
     widgets::*,
 };
@@ -79,7 +77,7 @@ impl BlastTab for LoadTab {
                 self.sims.previous();
             }
             KeyCode::Enter => {
-                return ProcessResult::StartNetwork;
+                return ProcessResult::LoadNetwork(self.sims.items[self.sims.state.selected().unwrap()].clone());
             }
             _ => {}
         }
