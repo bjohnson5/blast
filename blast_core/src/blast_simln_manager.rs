@@ -59,7 +59,7 @@ impl BlastSimLnManager {
     }
 
     /// Create payment activity for the simulation
-    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
+    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: Option<u16>, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
         let a = ActivityParser{source: NodeId::Alias(String::from(source)), destination: NodeId::Alias(String::from(destination)), start_secs: start_secs, count: count, interval_secs: ValueOrRange::Value(interval_secs), amount_msat: ValueOrRange::Value(amount_msat)};
         self.data.activity.push(a);
     }
@@ -194,7 +194,8 @@ impl BlastSimLnManager {
             Some(WriteResults {
                 results_dir: PathBuf::from(String::from(RESULTS_DIR)),
                 batch_size: 1,
-            })
+            }),
+            None
         );
         self.sim = Some(sim);
         Ok(())

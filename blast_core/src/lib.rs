@@ -10,6 +10,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::io::BufReader;
+use std::io;
 
 // Extra dependencies
 use bitcoincore_rpc::Auth;
@@ -391,7 +392,7 @@ impl Blast {
     }
 
     /// Create payment activity for the simulation
-    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
+    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: Option<u16>, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
         self.blast_simln_manager.add_activity(source, destination, start_secs, count, interval_secs, amount_msat);
     }
 
@@ -503,6 +504,26 @@ impl Blast {
             },
             Err(e) => Err(format!("Error getting address: {}", e))
         }
+    }
+
+    /// Get the available saved simulations that can be loaded
+    pub fn get_available_sims(&self) -> io::Result<Vec<String>> {
+        let mut subdirs = Vec::new();
+        for entry in fs::read_dir(BLAST_SIM_DIR)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    subdirs.push(name.to_string());
+                }
+            }
+        }
+        Ok(subdirs)
+    }
+
+    /// Get the available models so that the user can choose which ones to use
+    pub fn get_available_models(&self) -> Result<Vec<String>, String> {
+        self.blast_model_manager.get_models()
     }
 
     /// Start a model by name and wait for the RPC connection to be made

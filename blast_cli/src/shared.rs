@@ -1,7 +1,5 @@
 use ratatui::{
-    crossterm::{
-        event::KeyEvent
-    },
+    crossterm::event::KeyEvent,
     prelude::*,
     widgets::*,
 };

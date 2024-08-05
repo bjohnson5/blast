@@ -1,3 +1,6 @@
+// Blast libraries
+use blast_core::Blast;
+
 use crate::shared::*;
 use crate::new::*;
 use crate::load::*;
@@ -9,21 +12,33 @@ pub struct BlastCli {
     pub load: LoadTab,
     pub config: ConfigureTab,
     pub run: RunTab,
+    pub blast: Blast
 }
 
 impl BlastCli {
     pub fn new() -> Self {
-        // TODO: this is a placeholder, initialize with the actual available models
-        let mut model_list: Vec<Model> = Vec::new();
-        model_list.push(Model{name: String::from("blast_lnd"), num_nodes: 0});
-        model_list.push(Model{name: String::from("blast_ldk"), num_nodes: 0});
-        model_list.push(Model{name: String::from("blast_cln"), num_nodes: 0});
+        // Create the blast core object
+        let blast = Blast::new();
 
-        // TODO: this is a placeholder, initialize with the actual saved simulations
+        let mut model_list: Vec<Model> = Vec::new();
+        match blast.get_available_models() {
+            Ok(models) => {
+                for model_name in models {
+                    model_list.push(Model{name: model_name.clone(), num_nodes: 0});
+                }
+            },
+            Err(_) => {}
+        }
+
         let mut sim_list: Vec<String> = Vec::new();
-        sim_list.push(String::from("Test Simulation 1"));
-        sim_list.push(String::from("Another Test Simulation"));
-        sim_list.push(String::from("Simulation3"));
+        match blast.get_available_sims() {
+            Ok(sims) => {
+                for name in sims {
+                    sim_list.push(name);
+                }
+            },
+            Err(_) => {}
+        }
 
         let nt = NewTab{models: StatefulList::with_items(model_list)};
         let lt = LoadTab{sims: StatefulList::with_items(sim_list)};
@@ -35,6 +50,7 @@ impl BlastCli {
             load: lt,
             config: ct,
             run: rt,
+            blast: blast
         }
     }
 }

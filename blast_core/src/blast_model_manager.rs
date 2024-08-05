@@ -235,6 +235,16 @@ impl BlastModelManager {
         }        
     }
 
+    /// Get a list of the currently available models
+    pub fn get_models(&self) -> Result<Vec<String>, String> {
+        let keys: Vec<String> = self.models.keys().cloned().collect();
+        if keys.is_empty() {
+            Err(String::from("No models available"))
+        } else {
+            Ok(keys)
+        }       
+    }
+
     /// Start a given number of nodes for the given model name
     pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<String, String> {
         // Get the RPC client for this model

@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+blast_core = { path = "../blast_core" }
 ratatui = "0.27.0"

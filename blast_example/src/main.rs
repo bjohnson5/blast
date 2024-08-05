@@ -36,7 +36,7 @@ async fn new_simulation() {
     // Create the blast core object
     let mut blast = Blast::new();
 
-    // Control Flow: 
+    // Control Flow:
     // create_network -- starts models and nodes OR load network
     // ** user can now add activity, events, interact with nodes, connect outside nodes, etc...
     // finalize_simulation -- gets the simulation ready to be run
@@ -277,7 +277,7 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- ADD ACTIVITY / EVENTS -----------------------------------------------");
 
-    blast.add_activity("blast_lnd-0000", "blast_lnd-0001", 0, None, 1, 2000);
+    blast.add_activity("blast_lnd-0000", "blast_lnd-0001", None, None, 1, 2000);
 
     let mut good_start = Vec::new();
     good_start.push(String::from("node1"));
@@ -393,7 +393,7 @@ async fn new_simulation() {
             }
         }
 
-        blast.add_activity("blast_lnd-0000", &param.clone(), 0, None, 1, 2000);
+        blast.add_activity("blast_lnd-0000", &param.clone(), None, None, 1, 2000);
     }
 
     // Print information about the updated network
