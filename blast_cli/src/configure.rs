@@ -16,6 +16,8 @@ pub enum ConfigureSection {
 
 pub struct ConfigureTab {
     pub input: String,
+    pub history: Vec<String>,
+    pub history_index: usize,
     pub character_index: usize,
     pub messages: Vec<String>,
     pub events: StatefulList<String>,
@@ -26,21 +28,15 @@ pub struct ConfigureTab {
 
 impl ConfigureTab {
     pub fn new() -> Self {
-        // TODO: this is a placeholder, initialize with the actual saved simulations
-        let mut events_list: Vec<String> = Vec::new();
-        let mut channel_list: Vec<String> = Vec::new();
-        let mut activity_list: Vec<String> = Vec::new();
-        events_list.push(String::from("10s OpenChannel (blast_lnd0000 --> blast_lnd0001: 2000msat)"));
-        channel_list.push(String::from("0: blast_lnd0000 --> blast_lnd0001: 2000msat"));
-        activity_list.push(String::from("blast_ldk0000 --> blast_lnd0004: 2000msat, 5s"));
-
         Self {
             input: String::new(),
+            history: Vec::new(),
+            history_index: 0,
             messages: Vec::new(),
             character_index: 0,
-            events: StatefulList::with_items(events_list),
-            channels: StatefulList::with_items(channel_list),
-            activity: StatefulList::with_items(activity_list),
+            events: StatefulList::with_items(Vec::new()),
+            channels: StatefulList::with_items(Vec::new()),
+            activity: StatefulList::with_items(Vec::new()),
             current_section: ConfigureSection::Command
         }
     }
@@ -175,8 +171,8 @@ impl BlastTab for ConfigureTab {
             .messages
             .iter()
             .enumerate()
-            .map(|(i, m)| {
-                let content = Line::from(Span::raw(format!("{i}: {m}")));
+            .map(|(_, m)| {
+                let content = Line::from(Span::raw(format!("{m}")));
                 ListItem::new(content)
             })
             .collect();
@@ -195,14 +191,7 @@ impl BlastTab for ConfigureTab {
         self.channels.clear();
         self.activity.clear();
         self.reset_cursor();
-    }
-
-    fn is_new(&self) -> bool {
-        false
-    }
-
-    fn is_load(&self) -> bool {
-        false
+        self.history_index = 0;
     }
 
     fn process(&mut self, key: KeyEvent) -> ProcessResult {
@@ -222,11 +211,12 @@ impl BlastTab for ConfigureTab {
                         return ProcessResult::StartSim;
                     } else {
                         // Otherwise, run the command and show the output
-                        // TODO: execute the command and get the output
+                        self.history.push(command.clone());
+                        self.history_index = self.history.len() - 1;
                         self.messages.clear();
                         self.input.clear();
                         self.reset_cursor();
-                        self.messages.push(command.clone());
+                        return ProcessResult::Command(command.clone());
                     }
                 }
                 KeyCode::Char(to_insert) => {
@@ -278,8 +268,18 @@ impl BlastTab for ConfigureTab {
                     }
                 }
                 KeyCode::Up => {
+                    self.messages.push(self.history_index.to_string());
                     match self.current_section {
-                        ConfigureSection::Command => {}
+                        ConfigureSection::Command => {
+                            if self.history_index == self.history.len() {
+                                self.history_index -= 1;
+                            }
+                            self.input = self.history.get(self.history_index).unwrap_or(&String::from("")).to_string();
+                            self.character_index = self.input.len();
+                            if self.history_index != 0 {
+                                self.history_index -= 1;
+                            }
+                        }
                         ConfigureSection::Events => {
                             self.events.previous();
                         }
@@ -292,8 +292,15 @@ impl BlastTab for ConfigureTab {
                     }
                 }
                 KeyCode::Down => {
+                    self.messages.push(self.history_index.to_string());
                     match self.current_section {
-                        ConfigureSection::Command => {}
+                        ConfigureSection::Command => {
+                            if self.history_index <= self.history.len() - 1 {
+                                self.input = self.history.get(self.history_index).unwrap_or(&String::from("")).to_string();
+                                self.character_index = self.input.len();
+                                self.history_index += 1;
+                            }
+                        }
                         ConfigureSection::Events => {
                             self.events.next();
                         }
@@ -316,8 +323,18 @@ impl BlastTab for ConfigureTab {
         2
     }
 
-    fn update_data(&mut self) {
-        // TODO: update data from blast core
+    fn update_runtime_data(&mut self) {
         return;
+    }
+
+    fn update_config_data(&mut self, mut messages: Vec<String>, mut events: Vec<String>, mut channels: Vec<String>, mut activity: Vec<String>) {
+        self.messages.append(&mut messages);
+        self.events.items.append(&mut events);
+        self.channels.items.append(&mut channels);
+        self.activity.items.append(&mut activity);
+    }
+
+    fn esc_operation(&mut self) -> ProcessResult {
+        ProcessResult::NoOp
     }
 }

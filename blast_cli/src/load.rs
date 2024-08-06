@@ -58,14 +58,6 @@ impl BlastTab for LoadTab {
         self.sims.clear();
     }
 
-    fn is_new(&self) -> bool {
-        false
-    }
-
-    fn is_load(&self) -> bool {
-        true
-    }
-
     fn process(&mut self, key: KeyEvent) -> ProcessResult {
         match key.code {
             // Scroll the list of simulations
@@ -89,8 +81,15 @@ impl BlastTab for LoadTab {
         1
     }
 
-    fn update_data(&mut self) {
-        // TODO: update data from blast core
+    fn update_runtime_data(&mut self) {
         return;
+    }
+
+    fn update_config_data(&mut self, _: Vec<String>, _: Vec<String>, _: Vec<String>, _: Vec<String>) {
+        return;
+    }
+
+    fn esc_operation(&mut self) -> ProcessResult {
+        ProcessResult::ExitPage
     }
 }

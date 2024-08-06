@@ -66,6 +66,8 @@ pub enum ProcessResult {
     StartSim,
     StopNetwork,
     StopSim,
+    Command(String),
+    ExitPage,
     NoOp,
 }
 
@@ -92,9 +94,9 @@ pub trait BlastTab {
     fn draw(&mut self, frame: &mut Frame, area: Rect);
     fn init(&mut self);
     fn close(&mut self);
-    fn is_new(&self) -> bool;
-    fn is_load(&self) -> bool;
     fn process(&mut self, key: KeyEvent) -> ProcessResult;
     fn get_index(&self) -> usize;
-    fn update_data(&mut self);
+    fn update_runtime_data(&mut self);
+    fn update_config_data(&mut self, messages: Vec<String>, events: Vec<String>, channels: Vec<String>, activity: Vec<String>);
+    fn esc_operation(&mut self) -> ProcessResult;
 }

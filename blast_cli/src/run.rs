@@ -182,14 +182,6 @@ impl BlastTab for RunTab {
         self.success_rate_data = [(0.0, 0.0); 21];
     }
 
-    fn is_new(&self) -> bool {
-        false
-    }
-
-    fn is_load(&self) -> bool {
-        false
-    }
-
     fn process(&mut self, key: KeyEvent) -> ProcessResult {
         match key.code {
             // The Run page is mainly readonly and will show the status of the running simulation, use `s` to stop the simulation and go back to the Configure page
@@ -252,8 +244,7 @@ impl BlastTab for RunTab {
         3
     }
 
-    fn update_data(&mut self) {
-        // TODO: update data from blast core
+    fn update_runtime_data(&mut self) {
         self.progress = self.progress + 1.0;
         self.window[0] += 1.0;
         self.window[1] += 1.0;
@@ -270,5 +261,13 @@ impl BlastTab for RunTab {
         if self.window[1] % 10.0 == 0.0 {
             self.add = !self.add;
         }
+    }
+
+    fn update_config_data(&mut self, _: Vec<String>, _: Vec<String>, _: Vec<String>, _: Vec<String>) {
+        return;
+    }
+
+    fn esc_operation(&mut self) -> ProcessResult {
+        ProcessResult::NoOp
     }
 }

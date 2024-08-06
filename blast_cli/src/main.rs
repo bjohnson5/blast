@@ -97,13 +97,13 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                         }
                         // Choose a different tab
                         KeyCode::Left => {
-                            if current.is_load() {
+                            if current.get_index() == 1 {
                                 current = &mut blast_cli.new;
                             }
                         }
                         // Choose a different tab
                         KeyCode::Right => {
-                            if current.is_new() {
+                            if current.get_index() == 0 {
                                 current = &mut blast_cli.load;
                             }
                         }
@@ -126,9 +126,12 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                             return Ok(());
                         }
                         KeyCode::Esc => {
-                            if current.is_new() || current.is_load() {
-                                mode = Mode::Menu;
-                                current.close();
+                            match current.esc_operation() {
+                                ProcessResult::ExitPage => {
+                                    mode = Mode::Menu;
+                                    current.close();
+                                },
+                                _ => {}
                             }
                         }
                         // Pass the key event to the correct page
@@ -212,7 +215,16 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     current = &mut blast_cli.config;
                                     current.init();
                                 },
-                                ProcessResult::NoOp => {}
+                                ProcessResult::Command(c) => {
+                                    // use c in blast_cli.blast call for that command
+                                    let output = run_command(&mut blast_cli.blast, c).await;
+                                    let events_list: Vec<String> = Vec::new();
+                                    let channel_list: Vec<String> = Vec::new();
+                                    let activity_list: Vec<String> = Vec::new();
+                                    current.update_config_data(output, activity_list, channel_list, events_list);
+                                }
+                                ProcessResult::NoOp => {},
+                                _ => {}
                             }
                         }
                     }
@@ -221,7 +233,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
         }
 
         if last_tick.elapsed() >= tick_rate {
-            current.update_data();
+            current.update_runtime_data();
             last_tick = Instant::now();
         }
     }
@@ -269,4 +281,40 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage((100 - percent_x) / 2),
     ])
     .split(popup_layout[1])[1]
+}
+
+async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> {
+    let mut output: Vec<String> = Vec::new();
+    let mut words = cmd.split_whitespace();
+    
+    if let Some(first_word) = words.next() {
+        match first_word {
+            "save" => output.push(String::from(first_word)),
+            "add_activity" => output.push(String::from(first_word)),
+            "add_event" => output.push(String::from(first_word)),
+            "get_nodes" => output.push(String::from(first_word)),
+            "get_pub_key" => {
+                match blast.get_pub_key(String::from(words.next().unwrap_or(""))).await {
+                    Ok(s) => {
+                        output.push(s);
+                    },
+                    Err(e) => {
+                        output.push(e)
+                    }
+                }
+            },
+            "list_peers" => output.push(String::from(first_word)),
+            "wallet_balance" => output.push(String::from(first_word)),
+            "channel_balance" => output.push(String::from(first_word)),
+            "list_channels" => output.push(String::from(first_word)),
+            "open_channel" => output.push(String::from(first_word)),
+            "close_channel" => output.push(String::from(first_word)),
+            "connect_peer" => output.push(String::from(first_word)),
+            "disconnect_peer" => output.push(String::from(first_word)),
+            "fund_node" => output.push(String::from(first_word)),
+            _ => output.push(String::from("Unknown command")),
+        }
+    }
+
+    output
 }
