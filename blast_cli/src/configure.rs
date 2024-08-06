@@ -212,7 +212,7 @@ impl BlastTab for ConfigureTab {
                     } else {
                         // Otherwise, run the command and show the output
                         self.history.push(command.clone());
-                        self.history_index = self.history.len() - 1;
+                        self.history_index = self.history.len();
                         self.messages.clear();
                         self.input.clear();
                         self.reset_cursor();
@@ -268,17 +268,13 @@ impl BlastTab for ConfigureTab {
                     }
                 }
                 KeyCode::Up => {
-                    self.messages.push(self.history_index.to_string());
                     match self.current_section {
                         ConfigureSection::Command => {
-                            if self.history_index == self.history.len() {
+                            if self.history_index != 0 {
                                 self.history_index -= 1;
                             }
                             self.input = self.history.get(self.history_index).unwrap_or(&String::from("")).to_string();
                             self.character_index = self.input.len();
-                            if self.history_index != 0 {
-                                self.history_index -= 1;
-                            }
                         }
                         ConfigureSection::Events => {
                             self.events.previous();
@@ -292,13 +288,12 @@ impl BlastTab for ConfigureTab {
                     }
                 }
                 KeyCode::Down => {
-                    self.messages.push(self.history_index.to_string());
                     match self.current_section {
                         ConfigureSection::Command => {
                             if self.history_index <= self.history.len() - 1 {
+                                self.history_index += 1;
                                 self.input = self.history.get(self.history_index).unwrap_or(&String::from("")).to_string();
                                 self.character_index = self.input.len();
-                                self.history_index += 1;
                             }
                         }
                         ConfigureSection::Events => {
