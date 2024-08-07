@@ -37,7 +37,7 @@ pub const BLAST_LOG_FILE: &str = ".blast/blast.log";
 async fn main() -> Result<(), Box<dyn Error>> {
     let home = env::var("HOME").expect("HOME environment variable not set");
     let folder_path = PathBuf::from(home).join(BLAST_LOG_FILE);
-    std::fs::create_dir_all(folder_path).unwrap();
+    std::fs::create_dir_all(folder_path.clone()).unwrap();
 
     let _ = WriteLogger::init(
         LevelFilter::Info,
