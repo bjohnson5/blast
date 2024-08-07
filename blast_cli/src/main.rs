@@ -111,6 +111,16 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                         KeyCode::Right => {
                             if current.get_index() == 0 {
                                 current = &mut blast_cli.load;
+                                let mut sim_list: Vec<String> = Vec::new();
+                                match blast_cli.blast.get_available_sims() {
+                                    Ok(sims) => {
+                                        for name in sims {
+                                            sim_list.push(name);
+                                        }
+                                    },
+                                    Err(_) => {}
+                                }
+                                current.update_config_data(Some(sim_list), None, None, None);
                             }
                         }
                         _ => {}
@@ -156,7 +166,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             let events_list: Vec<String> = blast_cli.blast.get_events();
                                             let channel_list: Vec<String> = blast_cli.blast.get_channels();
                                             let activity_list: Vec<String> = blast_cli.blast.get_activity();
-                                            current.update_config_data(Vec::new(), events_list, channel_list, activity_list);
+                                            current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
                                             current.init();
                                         },
                                         Err(e) => {
@@ -174,7 +184,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             let events_list: Vec<String> = blast_cli.blast.get_events();
                                             let channel_list: Vec<String> = blast_cli.blast.get_channels();
                                             let activity_list: Vec<String> = blast_cli.blast.get_activity();
-                                            current.update_config_data(Vec::new(), events_list, channel_list, activity_list);
+                                            current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
                                             current.init();
                                         },
                                         Err(e) => {
@@ -230,7 +240,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     let events_list: Vec<String> = blast_cli.blast.get_events();
                                     let channel_list: Vec<String> = blast_cli.blast.get_channels();
                                     let activity_list: Vec<String> = blast_cli.blast.get_activity();
-                                    current.update_config_data(Vec::new(), events_list, channel_list, activity_list);
+                                    current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
                                     current.init();
                                 },
                                 ProcessResult::Command(c) => {
@@ -239,7 +249,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     let events_list: Vec<String> = blast_cli.blast.get_events();
                                     let channel_list: Vec<String> = blast_cli.blast.get_channels();
                                     let activity_list: Vec<String> = blast_cli.blast.get_activity();
-                                    current.update_config_data(output, events_list, channel_list, activity_list);
+                                    current.update_config_data(Some(output), Some(events_list), Some(channel_list), Some(activity_list));
                                 }
                                 ProcessResult::NoOp => {},
                                 _ => {}

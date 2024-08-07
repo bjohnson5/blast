@@ -100,7 +100,7 @@ impl BlastTab for NewTab {
         return;
     }
 
-    fn update_config_data(&mut self, _: Vec<String>, _: Vec<String>, _: Vec<String>, _: Vec<String>) {
+    fn update_config_data(&mut self, _: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>) {
         return;
     }
 

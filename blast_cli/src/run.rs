@@ -263,7 +263,7 @@ impl BlastTab for RunTab {
         }
     }
 
-    fn update_config_data(&mut self, _: Vec<String>, _: Vec<String>, _: Vec<String>, _: Vec<String>) {
+    fn update_config_data(&mut self, _: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>) {
         return;
     }
 

@@ -85,8 +85,8 @@ impl BlastTab for LoadTab {
         return;
     }
 
-    fn update_config_data(&mut self, _: Vec<String>, _: Vec<String>, _: Vec<String>, _: Vec<String>) {
-        return;
+    fn update_config_data(&mut self, sims: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>) {
+        self.sims.items = sims.unwrap_or(Vec::new());
     }
 
     fn esc_operation(&mut self) -> ProcessResult {
