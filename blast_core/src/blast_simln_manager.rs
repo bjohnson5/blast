@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::BufReader;
 use std::fs;
+use std::env;
 
 // Extra dependencies
 use serde::{Serialize, Deserialize};
@@ -26,7 +27,7 @@ pub const EXPECTED_PAYMENT_AMOUNT: u64 = 3_800_000;
 pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
 
 /// The directory to write the sim-ln results to
-pub const RESULTS_DIR: &str = "/home/blast_results";
+pub const RESULTS_DIR: &str = ".blast/blast_results";
 
 /// The BlastSimLnManager holds the main sim-ln Simulation object and the current node and activity data that sim-ln uses
 #[derive(Clone)]
@@ -185,6 +186,9 @@ impl BlastSimLnManager {
             });
         }
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(RESULTS_DIR);
+
         let sim = Simulation::new(
             clients,
             validated_activities,
@@ -192,7 +196,7 @@ impl BlastSimLnManager {
             EXPECTED_PAYMENT_AMOUNT,
             ACTIVITY_MULTIPLIER,
             Some(WriteResults {
-                results_dir: PathBuf::from(String::from(RESULTS_DIR)),
+                results_dir: folder_path,
                 batch_size: 1,
             }),
             None
@@ -205,8 +209,11 @@ impl BlastSimLnManager {
     pub async fn start(&self) -> Result<(), Error> {
         log::info!("BlastSimlnManager starting simulation.");
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(RESULTS_DIR);
+
         // Create the results directory if it does not exist
-        match fs::create_dir_all(RESULTS_DIR) {
+        match fs::create_dir_all(folder_path) {
             Ok(_) => {},
             Err(e) => return Err(anyhow!("Error creating results directory: {}", e))
         };

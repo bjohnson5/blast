@@ -6,6 +6,7 @@ use std::io::{stdin, stdout, Read, Write};
 use std::time::Duration;
 use std::thread;
 use std::env;
+use std::path::PathBuf;
 
 // Extra dependencies
 use ctrlc;
@@ -17,6 +18,10 @@ use blast_core::Blast;
 
 #[tokio::main]
 async fn main() {
+    let home = env::var("HOME").expect("HOME environment variable not set");
+    let folder_path = PathBuf::from(home).join(".blast/");
+    std::fs::create_dir_all(folder_path.display().to_string()).unwrap();
+
     SimpleLogger::new()
     .with_level(LevelFilter::Info)
     .init()

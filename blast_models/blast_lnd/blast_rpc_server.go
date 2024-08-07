@@ -323,17 +323,28 @@ func (s *BlastRpcServer) StopModel(ctx context.Context, request *pb.BlastStopMod
 
 // Load a previous state of this model
 func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest) (*pb.BlastLoadResponse, error) {
-	sim_dir := SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
-
-	err := s.blast_lnd.load_nodes(sim_dir + request.Sim + ".tar.gz")
 	response := &pb.BlastLoadResponse{
-		Success: err == nil,
+		Success: false,
 	}
+	
+	homeDir, err := os.UserHomeDir()
+    if err != nil {
+        return response, err
+    }
+
+	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+
+	err = s.blast_lnd.load_nodes(sim_dir + request.Sim + ".tar.gz")
+    if err != nil {
+        return response, err
+    }
 
 	err = s.blast_lnd.load_channels(sim_dir + request.Sim + CHANNEL_SUFFIX)
 	if err != nil {
 		return response, err
 	}
+
+	response.Success = true
 
 	return response, err
 }
@@ -344,7 +355,12 @@ func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest)
 		Success: false,
 	}
 
-	sim_dir := SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+	homeDir, err := os.UserHomeDir()
+    if err != nil {
+        return response, err
+    }
+
+	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
 
 	if _, err := os.Stat(sim_dir); os.IsNotExist(err) {
 		os.MkdirAll(sim_dir, 0700)

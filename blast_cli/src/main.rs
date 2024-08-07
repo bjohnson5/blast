@@ -4,6 +4,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::process::Child;
 use std::fs::File;
+use std::path::PathBuf;
+use std::env;
 
 use simplelog::WriteLogger;
 use simplelog::Config;
@@ -29,14 +31,18 @@ use crate::shared::*;
 use crate::blast_cli::*;
 
 /// The log file for blast
-pub const BLAST_LOG_FILE: &str = "/home/blast.log";
+pub const BLAST_LOG_FILE: &str = ".blast/blast.log";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let home = env::var("HOME").expect("HOME environment variable not set");
+    let folder_path = PathBuf::from(home).join(BLAST_LOG_FILE);
+    std::fs::create_dir_all(folder_path).unwrap();
+
     let _ = WriteLogger::init(
         LevelFilter::Info,
         Config::default(),
-        File::create(BLAST_LOG_FILE).unwrap(),
+        File::create(folder_path).unwrap(),
     );
 
     // setup terminal
@@ -289,24 +295,71 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
     
     if let Some(first_word) = words.next() {
         match first_word {
-            "save" => output.push(String::from(first_word)),
+            "save" => {
+                match blast.save(words.next().unwrap_or("simulation1")).await {
+                    Ok(()) => {
+                        output.push(String::from("Successfully saved simulation."));
+                    },
+                    Err(e) => {
+                        output.push(e);
+                    }
+                }
+            },
             "add_activity" => output.push(String::from(first_word)),
             "add_event" => output.push(String::from(first_word)),
-            "get_nodes" => output.push(String::from(first_word)),
+            "get_nodes" => {
+                output = blast.get_nodes();
+            },
             "get_pub_key" => {
                 match blast.get_pub_key(String::from(words.next().unwrap_or(""))).await {
                     Ok(s) => {
                         output.push(s);
                     },
                     Err(e) => {
-                        output.push(e)
+                        output.push(e);
                     }
                 }
             },
-            "list_peers" => output.push(String::from(first_word)),
-            "wallet_balance" => output.push(String::from(first_word)),
-            "channel_balance" => output.push(String::from(first_word)),
-            "list_channels" => output.push(String::from(first_word)),
+            "list_peers" => {
+                match blast.list_peers(String::from(words.next().unwrap_or(""))).await {
+                    Ok(s) => {
+                        output.push(s);
+                    },
+                    Err(e) => {
+                        output.push(e);
+                    }
+                }
+            },
+            "wallet_balance" => {
+                match blast.wallet_balance(String::from(words.next().unwrap_or(""))).await {
+                    Ok(s) => {
+                        output.push(s);
+                    },
+                    Err(e) => {
+                        output.push(e);
+                    }
+                }
+            },
+            "channel_balance" =>  {
+                match blast.channel_balance(String::from(words.next().unwrap_or(""))).await {
+                    Ok(s) => {
+                        output.push(s);
+                    },
+                    Err(e) => {
+                        output.push(e);
+                    }
+                }
+            },
+            "list_channels" =>  {
+                match blast.list_channels(String::from(words.next().unwrap_or(""))).await {
+                    Ok(s) => {
+                        output.push(s);
+                    },
+                    Err(e) => {
+                        output.push(e);
+                    }
+                }
+            },
             "open_channel" => output.push(String::from(first_word)),
             "close_channel" => output.push(String::from(first_word)),
             "connect_peer" => output.push(String::from(first_word)),

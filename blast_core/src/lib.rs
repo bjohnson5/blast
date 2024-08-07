@@ -11,6 +11,8 @@ use std::fs::File;
 use std::io::Write;
 use std::io::BufReader;
 use std::io;
+use std::path::PathBuf;
+use std::env;
 
 // Extra dependencies
 use bitcoincore_rpc::Auth;
@@ -43,7 +45,7 @@ pub const BITCOIND_USER: &str = "user";
 pub const BITCOIND_PASS: &str = "pass";
 
 /// The directory to save simulations in
-pub const BLAST_SIM_DIR: &str = "/home/blast_sims";
+pub const BLAST_SIM_DIR: &str = ".blast/blast_sims";
 
 /// The Blast struct is the main public interface that can be used to run a simulation.
 pub struct Blast {
@@ -205,8 +207,11 @@ impl Blast {
     pub async fn load(&mut self, sim_name: &str, running: Arc<AtomicBool>) -> Result<Vec<Child>, String> {
         log::info!("Loading BLAST Simulation");
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(BLAST_SIM_DIR);
+
         // Get events
-        let mut events_path: String = BLAST_SIM_DIR.to_owned();
+        let mut events_path: String = folder_path.display().to_string();
         events_path.push_str("/");
         events_path.push_str(sim_name);
         events_path.push_str("/");
@@ -214,7 +219,7 @@ impl Blast {
         self.blast_event_manager.set_event_json(&events_path)?;
   
         // Get simln
-        let mut simln_path: String = BLAST_SIM_DIR.to_owned();
+        let mut simln_path: String = folder_path.display().to_string();
         simln_path.push_str("/");
         simln_path.push_str(sim_name);
         simln_path.push_str("/");
@@ -222,7 +227,7 @@ impl Blast {
         self.blast_simln_manager.set_simln_json(&simln_path)?;
 
         // Load bitcoind
-        let mut path: String = BLAST_SIM_DIR.to_owned();
+        let mut path: String = folder_path.display().to_string();
         path.push_str("/");
         path.push_str(sim_name);
         path.push_str("/");
@@ -249,7 +254,7 @@ impl Blast {
         };
         
         // Get network from models.json file
-        let mut models_path: String = BLAST_SIM_DIR.to_owned();
+        let mut models_path: String = folder_path.display().to_string();
         models_path.push_str("/");
         models_path.push_str(sim_name);
         models_path.push_str("/");
@@ -280,8 +285,11 @@ impl Blast {
     pub async fn save(&mut self, sim_name: &str) -> Result<(), String> {
         log::info!("Saving BLAST Simulation");
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(BLAST_SIM_DIR);
+
         // Create folder for sim_name in the simulation directory
-        let mut path: String = BLAST_SIM_DIR.to_owned();
+        let mut path: String = folder_path.display().to_string();
         path.push_str("/");
         path.push_str(sim_name);
         path.push_str("/");
@@ -311,7 +319,7 @@ impl Blast {
             self.blast_model_manager.save_model(key, sim_name.to_owned()).await?
         }
 
-        // Create models.json file that contains the active model names and save it to BLAST_SIM_DIR/sim_name
+        // Create models.json file that contains the active model names and save it to ~/BLAST_SIM_DIR/sim_name
         let json = match serde_json::to_string(&self.network.clone().unwrap()) {
             Ok(s) => s,
             Err(e) => return Err(format!("Error getting models data: {}", e))
@@ -332,7 +340,7 @@ impl Blast {
 
     /// Save the bitcoind base layer data
     fn save_bitcoin(&self, path: &str) -> Result<(), String> {
-        // Zip up the ~/.bitcoin directory and copy it to BLAST_SIM_DIR/sim_name
+        // Zip up the ~/.bitcoin directory and copy it to ~/BLAST_SIM_DIR/sim_name
         let mut tarfile = path.to_owned();
         tarfile.push_str("bitcoin.tar.gz");
         let tar_gz = match File::create(&tarfile) {
@@ -349,7 +357,7 @@ impl Blast {
         }
     }
 
-    /// Create simln.json that contains the full simln data and copy it to BLAST_SIM_DIR/sim_name
+    /// Create simln.json that contains the full simln data and copy it to ~/BLAST_SIM_DIR/sim_name
     fn save_simln(&self, path: &str) -> Result<(), String> {
         let json = self.blast_simln_manager.get_simln_json()?;
 
@@ -366,7 +374,7 @@ impl Blast {
         }
     }
 
-    // Create events.json that contains the list of events and copyt it to BLAST_SIM_DIR/sim_name
+    // Create events.json that contains the list of events and copyt it to ~/BLAST_SIM_DIR/sim_name
     fn save_events(&self, path: &str) -> Result<(), String> {
         let json = self.blast_event_manager.get_event_json()?;
 
@@ -500,8 +508,11 @@ impl Blast {
 
     /// Get the available saved simulations that can be loaded
     pub fn get_available_sims(&self) -> io::Result<Vec<String>> {
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(BLAST_SIM_DIR);
+
         let mut subdirs = Vec::new();
-        for entry in fs::read_dir(BLAST_SIM_DIR)? {
+        for entry in fs::read_dir(folder_path.display().to_string())? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {

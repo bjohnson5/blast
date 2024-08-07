@@ -14,7 +14,7 @@ To run the `blast_example` application:
 ./run_example.sh
 ```
 
-This will run two simulations with different network details and save each of them in `/home/blast_sims`.
+This will run two simulations with different network details and save each of them in `~/.blast/blast_sims`.
 
 ## Test Case 1
 The first simulation that `blast_example` will create and run is called `test1`. Here are the details of that simulation:
