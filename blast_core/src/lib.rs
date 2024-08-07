@@ -396,9 +396,19 @@ impl Blast {
         self.blast_simln_manager.add_activity(source, destination, start_secs, count, interval_secs, amount_msat);
     }
 
+    /// Get all of the current activity
+    pub fn get_activity(&self) -> Vec<String> {
+        self.blast_simln_manager.get_activity()
+    }
+
     /// Create an event for the simulation
     pub fn add_event(&mut self, frame_num: u64, event: &str, args: Option<Vec<String>>) -> Result<(), String> {
         self.blast_event_manager.add_event(frame_num, event, args)
+    }
+
+    /// Get all of the scheduled events
+    pub fn get_events(&self) -> Vec<String> {
+        self.blast_event_manager.get_events()
     }
 
     /// Get all the nodes
@@ -444,6 +454,11 @@ impl Blast {
             Ok(s) => Ok(s),
             Err(e) => Err(format!("Error getting channels: {}", e))
         }
+    }
+
+    /// Get all channels for all models
+    pub fn get_channels(&self) -> Vec<String> {
+        self.blast_model_manager.get_channels()
     }
 
     /// Open a channel and optionally mine blocks to confirm the channel

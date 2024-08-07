@@ -65,6 +65,24 @@ impl BlastSimLnManager {
         self.data.activity.push(a);
     }
 
+    /// Get all of the current activity
+    pub fn get_activity(&self) -> Vec<String> {
+        let mut act: Vec<String> = Vec::new();
+        for a in &self.data.activity {
+            let start = match a.start_secs {
+                Some(i) => { i.to_string() },
+                None => { String::from("None") }
+            };
+            let count = match a.count {
+                Some(i) => { i.to_string() },
+                None => { String::from("None") }
+            };
+            act.push(format!("{} {} {} {} {} {}", a.source, a.destination, start, count, a.interval_secs, a.amount_msat));
+        }
+
+        act
+    }
+
     /// Add nodes from a json string returned by the model
     pub fn add_nodes(&mut self, s: String) -> Result<(), String> {
         let SimParams { mut nodes, .. } = match serde_json::from_str(&s) {

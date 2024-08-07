@@ -199,6 +199,18 @@ impl BlastEventManager {
         }
     }
 
+    /// Get all the scheduled events
+    pub fn get_events(&self) -> Vec<String> {
+        let mut events: Vec<String> = Vec::new();
+        for (k, current) in &self.events {
+            for e in current {
+                events.push(format!("{} {}", k, e));
+            }
+        }
+
+        events
+    }
+
     /// Validate that the correct args were given
     fn validate_args(&self, args: Option<Vec<String>>, event: BlastEvent) -> Result<Vec<String>, String> {
         match args {

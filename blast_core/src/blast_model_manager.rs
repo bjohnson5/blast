@@ -419,6 +419,13 @@ impl BlastModelManager {
         Ok(response.get_ref().channels.clone())
     }
 
+    /// Get all channels for all models
+    pub fn get_channels(&self) -> Vec<String> {
+        // TODO: implement get all channels
+        let chans: Vec<String> = Vec::new();
+        chans
+    }
+
     /// Open a channel from node with source_id to node with dest_id for the given amount and with the given chan_id
     pub async fn open_channel(&mut self, source_id: String, dest_id: String, amount: i64, push_amount: i64, chan_id: i64) -> Result<(), String> {
         let pub_key = self.get_pub_key(dest_id.clone()).await?;

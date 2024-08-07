@@ -37,7 +37,7 @@ pub const BLAST_LOG_FILE: &str = ".blast/blast.log";
 async fn main() -> Result<(), Box<dyn Error>> {
     let home = env::var("HOME").expect("HOME environment variable not set");
     let folder_path = PathBuf::from(home).join(BLAST_LOG_FILE);
-    std::fs::create_dir_all(folder_path.clone()).unwrap();
+    std::fs::create_dir_all(folder_path.parent().unwrap()).unwrap();
 
     let _ = WriteLogger::init(
         LevelFilter::Info,
@@ -82,7 +82,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
     let mut running_models: Vec<Child> = Vec::new();
 
     loop {
-        // Draw the frameclear
+        // Draw the frame
         terminal.draw(|f| ui(f, current, error.clone()))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
@@ -153,6 +153,10 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             running_models.append(&mut m);
                                             current.close();
                                             current = &mut blast_cli.config;
+                                            let events_list: Vec<String> = blast_cli.blast.get_events();
+                                            let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                            let activity_list: Vec<String> = blast_cli.blast.get_activity();
+                                            current.update_config_data(Vec::new(), events_list, channel_list, activity_list);
                                             current.init();
                                         },
                                         Err(e) => {
@@ -167,6 +171,10 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             running_models.append(&mut m);
                                             current.close();
                                             current = &mut blast_cli.config;
+                                            let events_list: Vec<String> = blast_cli.blast.get_events();
+                                            let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                            let activity_list: Vec<String> = blast_cli.blast.get_activity();
+                                            current.update_config_data(Vec::new(), events_list, channel_list, activity_list);
                                             current.init();
                                         },
                                         Err(e) => {
@@ -219,15 +227,19 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     // TODO: stop the simulation
                                     current.close();
                                     current = &mut blast_cli.config;
+                                    let events_list: Vec<String> = blast_cli.blast.get_events();
+                                    let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                    let activity_list: Vec<String> = blast_cli.blast.get_activity();
+                                    current.update_config_data(Vec::new(), events_list, channel_list, activity_list);
                                     current.init();
                                 },
                                 ProcessResult::Command(c) => {
                                     // use c in blast_cli.blast call for that command
                                     let output = run_command(&mut blast_cli.blast, c).await;
-                                    let events_list: Vec<String> = Vec::new();
-                                    let channel_list: Vec<String> = Vec::new();
-                                    let activity_list: Vec<String> = Vec::new();
-                                    current.update_config_data(output, activity_list, channel_list, events_list);
+                                    let events_list: Vec<String> = blast_cli.blast.get_events();
+                                    let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                    let activity_list: Vec<String> = blast_cli.blast.get_activity();
+                                    current.update_config_data(output, events_list, channel_list, activity_list);
                                 }
                                 ProcessResult::NoOp => {},
                                 _ => {}
@@ -293,6 +305,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
     let mut output: Vec<String> = Vec::new();
     let mut words = cmd.split_whitespace();
     
+    // TODO: error handling and easier use of command parameters
+
     if let Some(first_word) = words.next() {
         match first_word {
             "save" => {
@@ -305,8 +319,54 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                     }
                 }
             },
-            "add_activity" => output.push(String::from(first_word)),
-            "add_event" => output.push(String::from(first_word)),
+            "add_activity" => {
+                let source = String::from(words.next().unwrap_or(""));
+                let dest = String::from(words.next().unwrap_or(""));
+                let start_secs = match words.next().unwrap_or("").parse::<u16>() {
+                    Ok(value) => { Some(value) },
+                    Err(_) => { None }
+                };
+                let count = match words.next().unwrap_or("").parse::<u64>() {
+                    Ok(value) => { Some(value) },
+                    Err(_) => { None }
+                };
+
+                let interval = match words.next().unwrap_or("").parse::<u16>() {
+                    Ok(value) => { value },
+                    Err(_) => { 10 } // TODO set a default and log it to the output
+                };
+
+                let amount = match words.next().unwrap_or("").parse::<u64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 50000 } // TODO set a default and log it to the output
+                };
+                blast.add_activity(&source, &dest, start_secs, count, interval, amount);
+                output.push(String::from("Successfully added activity."));
+            },
+            "add_event" => {
+                let frame = match words.next().unwrap_or("").parse::<u64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 10 } // TODO set a default and log it to the output
+                };
+
+                let event = String::from(words.next().unwrap_or(""));
+
+                let mut event_args = Vec::new();
+                while let Some(w) = words.next() {
+                    event_args.push(String::from(w));
+                }
+
+                let args = if event_args.len() == 0 { None } else { Some(event_args) };
+
+                match blast.add_event(frame, &event, args) {
+                    Ok(()) => {
+                        output.push(String::from("Successfully added event."));
+                    },
+                    Err(e) => {
+                        output.push(e);
+                    }
+                }
+            },
             "get_nodes" => {
                 output = blast.get_nodes();
             },
@@ -360,6 +420,7 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                     }
                 }
             },
+            // TODO implement commands
             "open_channel" => output.push(String::from(first_word)),
             "close_channel" => output.push(String::from(first_word)),
             "connect_peer" => output.push(String::from(first_word)),

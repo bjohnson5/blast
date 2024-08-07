@@ -322,11 +322,11 @@ impl BlastTab for ConfigureTab {
         return;
     }
 
-    fn update_config_data(&mut self, mut messages: Vec<String>, mut events: Vec<String>, mut channels: Vec<String>, mut activity: Vec<String>) {
-        self.messages.append(&mut messages);
-        self.events.items.append(&mut events);
-        self.channels.items.append(&mut channels);
-        self.activity.items.append(&mut activity);
+    fn update_config_data(&mut self, messages: Vec<String>, events: Vec<String>, channels: Vec<String>, activity: Vec<String>) {
+        self.messages = messages.clone();
+        self.events.items = events.clone();
+        self.channels.items = channels.clone();
+        self.activity.items = activity.clone();
     }
 
     fn esc_operation(&mut self) -> ProcessResult {
