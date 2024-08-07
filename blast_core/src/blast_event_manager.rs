@@ -202,9 +202,15 @@ impl BlastEventManager {
     /// Get all the scheduled events
     pub fn get_events(&self) -> Vec<String> {
         let mut events: Vec<String> = Vec::new();
-        for (k, current) in &self.events {
-            for e in current {
-                events.push(format!("{} {}", k, e));
+
+        let mut keys: Vec<u64> = self.events.keys().cloned().collect();
+        keys.sort();
+
+        for k in keys {
+            if let Some(value) = self.events.get(&k) {
+                for e in value {
+                    events.push(format!("{} {}", k, e));
+                }
             }
         }
 
