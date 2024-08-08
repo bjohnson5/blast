@@ -168,7 +168,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             current.close();
                                             current = &mut blast_cli.config;
                                             let events_list: Vec<String> = blast_cli.blast.get_events();
-                                            let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                            let channel_list: Vec<String> = blast_cli.blast.get_channels().await;
                                             let activity_list: Vec<String> = blast_cli.blast.get_activity();
                                             current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
                                             current.init();
@@ -187,7 +187,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             current.close();
                                             current = &mut blast_cli.config;
                                             let events_list: Vec<String> = blast_cli.blast.get_events();
-                                            let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                            let channel_list: Vec<String> = blast_cli.blast.get_channels().await;
                                             let activity_list: Vec<String> = blast_cli.blast.get_activity();
                                             current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
                                             current.init();
@@ -293,7 +293,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                         current.close();
                                         current = &mut blast_cli.config;
                                         let events_list: Vec<String> = blast_cli.blast.get_events();
-                                        let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                        let channel_list: Vec<String> = blast_cli.blast.get_channels().await;
                                         let activity_list: Vec<String> = blast_cli.blast.get_activity();
                                         current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
                                         current.init();
@@ -302,7 +302,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                 ProcessResult::Command(c) => {
                                     let output = run_command(&mut blast_cli.blast, c).await;
                                     let events_list: Vec<String> = blast_cli.blast.get_events();
-                                    let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                    let channel_list: Vec<String> = blast_cli.blast.get_channels().await;
                                     let activity_list: Vec<String> = blast_cli.blast.get_activity();
                                     current.update_config_data(Some(output), Some(events_list), Some(channel_list), Some(activity_list));
                                 },

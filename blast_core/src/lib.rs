@@ -460,8 +460,8 @@ impl Blast {
     }
 
     /// Get all channels for all models
-    pub fn get_channels(&self) -> Vec<String> {
-        self.blast_model_manager.get_channels()
+    pub async fn get_channels(&mut self) -> Vec<String> {
+        self.blast_model_manager.get_channels().await
     }
 
     /// Open a channel and optionally mine blocks to confirm the channel

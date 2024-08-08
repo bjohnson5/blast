@@ -86,6 +86,8 @@ type SimJsonFile struct {
 
 // A channel point struct that is used to close an existing channel
 type ChannelPoint struct {
+	Source string
+	Dest string
 	FundingTxid []byte
 	OutputIndex uint32
 }

@@ -422,9 +422,22 @@ impl BlastModelManager {
     }
 
     /// Get all channels for all models
-    pub fn get_channels(&self) -> Vec<String> {
-        // TODO: implement get all channels
-        let chans: Vec<String> = Vec::new();
+    pub async fn get_channels(&mut self) -> Vec<String> {
+        let mut chans: Vec<String> = Vec::new();
+
+        for (_, client) in &mut self.models {
+            let request = tonic::Request::new(BlastGetModelChannelsRequest {});
+            let response = match client.rpc_connection.as_mut().unwrap().get_model_channels(request).await {
+                Ok(r) => r,
+                Err(_) => {
+                    continue;
+                }
+            };
+
+            let mut c: Vec<String> = response.get_ref().channels.split(',').map(|s| s.trim().to_string()).collect();
+            chans.append(&mut c);
+        }
+
         chans
     }
 

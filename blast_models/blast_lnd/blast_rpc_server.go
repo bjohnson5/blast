@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 
@@ -183,7 +185,7 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 					switch rpcUpdate.Update.(type) {
 					case *lnrpc.OpenStatusUpdate_ChanPending:
 					case *lnrpc.OpenStatusUpdate_ChanOpen:
-						s.blast_lnd.open_channels[strconv.Itoa(int(request.ChannelId))] = ChannelPoint{FundingTxid: rpcUpdate.GetChanOpen().ChannelPoint.GetFundingTxidBytes(), OutputIndex: rpcUpdate.GetChanOpen().ChannelPoint.OutputIndex}
+						s.blast_lnd.open_channels[strconv.Itoa(int(request.ChannelId))] = ChannelPoint{Source: request.Node, Dest: request.PeerPubKey, FundingTxid: rpcUpdate.GetChanOpen().ChannelPoint.GetFundingTxidBytes(), OutputIndex: rpcUpdate.GetChanOpen().ChannelPoint.OutputIndex}
 						return
 					case *lnrpc.OpenStatusUpdate_PsbtFund:
 					}
@@ -225,6 +227,23 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 	}
 
 	return response, err_val
+}
+
+func (s *BlastRpcServer) GetModelChannels(ctx context.Context, request *pb.BlastGetModelChannelsRequest) (*pb.BlastGetModelChannelsResponse, error) {
+	var sb strings.Builder
+	for key, value := range s.blast_lnd.open_channels {
+		sb.WriteString(fmt.Sprintf("%s: %s -> %s,", key, value.Source, value.Dest))
+	}
+
+	result := sb.String()
+	if len(result) > 0 {
+		result = result[:len(result)-2]
+	}
+
+	response := &pb.BlastGetModelChannelsResponse{
+		Channels: result,
+	}
+	return response, nil
 }
 
 // Blast requests that a node controlled by this model connects to a peer -- look up the node's RPC client and pass the request through to LND -- Blast -> Model -> Node
@@ -326,18 +345,18 @@ func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest)
 	response := &pb.BlastLoadResponse{
 		Success: false,
 	}
-	
+
 	homeDir, err := os.UserHomeDir()
-    if err != nil {
-        return response, err
-    }
+	if err != nil {
+		return response, err
+	}
 
 	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
 
 	err = s.blast_lnd.load_nodes(sim_dir + request.Sim + ".tar.gz")
-    if err != nil {
-        return response, err
-    }
+	if err != nil {
+		return response, err
+	}
 
 	err = s.blast_lnd.load_channels(sim_dir + request.Sim + CHANNEL_SUFFIX)
 	if err != nil {
@@ -356,9 +375,9 @@ func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest)
 	}
 
 	homeDir, err := os.UserHomeDir()
-    if err != nil {
-        return response, err
-    }
+	if err != nil {
+		return response, err
+	}
 
 	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
 
