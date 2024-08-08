@@ -132,13 +132,15 @@ impl BlastModelManager {
 
         // Run the model executable
         let file_stderr = OpenOptions::new()
-            .append(true)
+            .write(true)
             .create(true)
+            .truncate(true)
             .open(folder_path.display().to_string()+&model.config.name+".log")
             .unwrap();
         let file_stdout = OpenOptions::new()
-            .append(true)
+            .write(true)
             .create(true)
+            .truncate(true)
             .open(folder_path.display().to_string()+&model.config.name+".log")
             .unwrap();
         let child = match Command::new(model_exe).stderr(Stdio::from(file_stderr)).stdout(Stdio::from(file_stdout))
