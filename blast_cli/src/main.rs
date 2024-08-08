@@ -10,6 +10,8 @@ use std::env;
 use simplelog::WriteLogger;
 use simplelog::Config;
 use log::LevelFilter;
+use tokio::task::JoinSet;
+use anyhow::Error as AnyError;
 
 use ratatui::{
     crossterm::{
@@ -80,6 +82,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
     let mut error: Option<String> = None;
     let running = Arc::new(AtomicBool::new(true));
     let mut running_models: Vec<Child> = Vec::new();
+    let mut sim_tasks: Option<JoinSet<Result<(), AnyError>>> = None;
 
     loop {
         // Draw the frame
@@ -154,6 +157,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                         _ => {
                             match current.process(key) {
                                 ProcessResult::StartNetwork(models) => {
+                                    running.store(true, Ordering::SeqCst);
                                     let mut m = HashMap::new();
                                     for model in models {
                                         m.insert(model.name.clone(), model.num_nodes);
@@ -176,6 +180,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     };
                                 },
                                 ProcessResult::LoadNetwork(sim) => {
+                                    running.store(true, Ordering::SeqCst);
                                     match blast_cli.blast.load(&sim, running.clone()).await {
                                         Ok(mut m) => {
                                             running_models.append(&mut m);
@@ -191,13 +196,38 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                             error = Some(e);
                                             mode = Mode::Error;
                                         }
-                                    };                                    
+                                    };
                                 }
                                 ProcessResult::StartSim => {
-                                    // TODO: start the simulation
-                                    current.close();
-                                    current = &mut blast_cli.run;
-                                    current.init();
+                                    let mut failed = false;
+                                    let mut error_str = String::from("");
+                                    // Finalize the simulation and make it ready to run
+                                    match blast_cli.blast.finalize_simulation().await {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            failed = true;
+                                            error_str = e;
+                                        }        
+                                    }
+
+                                    // Start the simulation
+                                    sim_tasks = match blast_cli.blast.start_simulation().await {
+                                        Ok(j) => Some(j),
+                                        Err(e) => {
+                                            failed = true;
+                                            error_str = e;
+                                            None
+                                        }
+                                    };
+
+                                    if failed {
+                                        error = Some(format!("Failed to start the simulation: {:?}", error_str));
+                                        mode = Mode::Error;
+                                    } else {
+                                        current.close();
+                                        current = &mut blast_cli.run;
+                                        current.init();
+                                    }
                                 },
                                 ProcessResult::StopNetwork => {
                                     // Stop the models
@@ -234,24 +264,48 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     }
                                 },
                                 ProcessResult::StopSim => {
-                                    // TODO: stop the simulation
-                                    current.close();
-                                    current = &mut blast_cli.config;
-                                    let events_list: Vec<String> = blast_cli.blast.get_events();
-                                    let channel_list: Vec<String> = blast_cli.blast.get_channels();
-                                    let activity_list: Vec<String> = blast_cli.blast.get_activity();
-                                    current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
-                                    current.init();
+                                    // Stop the blast simulation
+                                    blast_cli.blast.stop_simulation();
+
+                                    let mut failed = false;
+                                    let mut error_str = String::from("");
+
+                                    match &mut sim_tasks {
+                                        Some(t) => {
+                                            // Wait for blast simulation to stop
+                                            while let Some(res) = t.join_next().await {
+                                                if let Err(_) = res {
+                                                    failed = true;
+                                                    error_str = String::from("Error waiting for simulation to stop");
+                                                }
+                                            }
+                                        },
+                                        None => {
+                                            failed = true;
+                                            error_str = String::from("No simulation tasks to stop");
+                                        }
+                                    }
+
+                                    if failed {
+                                        error = Some(format!("Failed to start the simulation: {:?}", error_str));
+                                        mode = Mode::Error;
+                                    } else {
+                                        current.close();
+                                        current = &mut blast_cli.config;
+                                        let events_list: Vec<String> = blast_cli.blast.get_events();
+                                        let channel_list: Vec<String> = blast_cli.blast.get_channels();
+                                        let activity_list: Vec<String> = blast_cli.blast.get_activity();
+                                        current.update_config_data(None, Some(events_list), Some(channel_list), Some(activity_list));
+                                        current.init();
+                                    }
                                 },
                                 ProcessResult::Command(c) => {
-                                    // use c in blast_cli.blast call for that command
                                     let output = run_command(&mut blast_cli.blast, c).await;
                                     let events_list: Vec<String> = blast_cli.blast.get_events();
                                     let channel_list: Vec<String> = blast_cli.blast.get_channels();
                                     let activity_list: Vec<String> = blast_cli.blast.get_activity();
                                     current.update_config_data(Some(output), Some(events_list), Some(channel_list), Some(activity_list));
-                                }
-                                ProcessResult::NoOp => {},
+                                },
                                 _ => {}
                             }
                         }

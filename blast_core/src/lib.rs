@@ -208,7 +208,7 @@ impl Blast {
         log::info!("Loading BLAST Simulation");
 
         let home = env::var("HOME").expect("HOME environment variable not set");
-        let folder_path = PathBuf::from(home).join(BLAST_SIM_DIR);
+        let folder_path = PathBuf::from(home.clone()).join(BLAST_SIM_DIR);
 
         // Get events
         let mut events_path: String = folder_path.display().to_string();
@@ -239,7 +239,8 @@ impl Blast {
 
         let tar = GzDecoder::new(tar_gz);
         let mut archive = Archive::new(tar);
-        match archive.unpack("/root/.bitcoin") {
+        let bitcoin_path = PathBuf::from(home).join(".bitcoin");
+        match archive.unpack(bitcoin_path) {
             Ok(_) => {},
             Err(e) => return Err(format!("Error reading simln data: {}", e)),
         }
@@ -345,13 +346,15 @@ impl Blast {
         tarfile.push_str("bitcoin.tar.gz");
         let tar_gz = match File::create(&tarfile) {
             Ok(t) => t,
-            Err(e) => return Err(format!("Error saving bitcoin data dir: {}", e)),
+            Err(e) => return Err(format!("Error saving bitcoin data dir: {} {}", e, tarfile)),
         };
 
         let enc = GzEncoder::new(tar_gz, Compression::default());
         let mut tar = tar::Builder::new(enc);
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(".bitcoin");
 
-        match tar.append_dir_all(".", "/root/.bitcoin") {
+        match tar.append_dir_all(".", folder_path) {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Error saving bitcoin data dir: {}", e))
         }
