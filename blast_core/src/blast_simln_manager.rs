@@ -210,7 +210,7 @@ impl BlastSimLnManager {
         let sim = Simulation::new(
             clients,
             validated_activities,
-            None,
+            Some(crate::TOTAL_FRAMES as u32),
             EXPECTED_PAYMENT_AMOUNT,
             ACTIVITY_MULTIPLIER,
             Some(WriteResults {
@@ -255,6 +255,13 @@ impl BlastSimLnManager {
         };
     }
 
+    /// Reset the simln manager when the current blast network is shutdown
+    pub fn reset(&mut self) {
+        log::info!("BlastEventManager resetting.");
+        self.data.activity.clear();
+        self.data.nodes.clear();
+    }
+
     /// Get all the nodes
     pub fn get_nodes(&self) -> Vec<String> {
         let mut ids = Vec::<String>::new();
@@ -266,5 +273,15 @@ impl BlastSimLnManager {
             ids.push(id);
         }
         ids
+    }
+
+    pub fn get_success_rate(&self) -> f64 {
+        // TODO implement
+        30.0
+    }
+
+    pub fn get_attempts(&self) -> u64 {
+        // TODO implement
+        53
     }
 }

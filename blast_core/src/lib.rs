@@ -47,6 +47,9 @@ pub const BITCOIND_PASS: &str = "pass";
 /// The directory to save simulations in
 pub const BLAST_SIM_DIR: &str = ".blast/blast_sims";
 
+/// TODO: make this configurable
+pub const TOTAL_FRAMES: u64 = 40;
+
 /// The Blast struct is the main public interface that can be used to run a simulation.
 pub struct Blast {
     blast_model_manager: BlastModelManager,
@@ -61,6 +64,14 @@ pub struct Blast {
 pub struct BlastNetwork {
     name: String,
     model_map: HashMap<String, i32>
+}
+
+/// The BlastStats struct holds statistics about the currently running simulation
+pub struct BlastStats {
+    pub total_frames: u64,
+    pub frame: u64,
+    pub success_rate: f64,
+    pub stats: Vec<String>
 }
 
 impl Blast {
@@ -140,6 +151,9 @@ impl Blast {
             Ok(_) => {},
             Err(e) => return Err(format!("Could not stop bitcoind: {}", e)),
         };
+
+        self.blast_event_manager.reset();
+        self.blast_simln_manager.reset();
 
         Ok(())
     }
@@ -417,6 +431,26 @@ impl Blast {
     /// Get all the nodes
     pub fn get_nodes(&self) -> Vec<String> {
         self.blast_simln_manager.get_nodes()
+    }
+
+    /// Get some basic simulation stats
+    pub async fn get_stats(&mut self) -> Option<BlastStats> {
+        let f = self.blast_event_manager.get_frame_number();
+        if f == 0 {
+            None
+        } else {
+            let sr = self.blast_simln_manager.get_success_rate();
+            let pa = self.blast_simln_manager.get_attempts();
+            let mut stats_list: Vec<String> = Vec::new();
+            stats_list.push(format!("Number of Nodes:          {}", self.get_nodes().len()));
+            stats_list.push(format!("Number of Channels:       {}", self.get_channels().await.len()));
+            stats_list.push(format!("Number of Events  :       {}", self.get_events().len()));
+            stats_list.push(format!("Payment Attempts:         {}", pa));
+            stats_list.push(format!("Payment Success Rate:     {}", sr));
+
+            let stats = BlastStats{total_frames: TOTAL_FRAMES, frame: f, success_rate: sr, stats: stats_list};
+            Some(stats)
+        }
     }
 
     /// Get the public key of a node

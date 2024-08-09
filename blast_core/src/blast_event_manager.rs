@@ -2,7 +2,7 @@
 use std::sync::Arc;
 use std::fmt;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering, AtomicU64};
 use std::time::Duration;
 use std::fs::File;
 use std::io::BufReader;
@@ -31,6 +31,7 @@ pub struct BlastEventManager {
     running: Arc<AtomicBool>,
     events: HashMap<u64,Vec<BlastEvent>>,
     bitcoin_rpc: Option<Client>,
+    frame_number: Arc<AtomicU64>
 }
 
 impl Clone for BlastEventManager {
@@ -41,7 +42,8 @@ impl Clone for BlastEventManager {
             bitcoin_rpc: match Client::new(crate::BITCOIND_RPC, Auth::UserPass(String::from(crate::BITCOIND_USER), String::from(crate::BITCOIND_PASS))) {
                 Ok(c) => Some(c),
                 Err(_) => None
-            }
+            },
+            frame_number: self.frame_number.clone()
         }
     }
 }
@@ -55,7 +57,8 @@ impl BlastEventManager {
             bitcoin_rpc: match Client::new(crate::BITCOIND_RPC, Auth::UserPass(String::from(crate::BITCOIND_USER), String::from(crate::BITCOIND_PASS))) {
                 Ok(c) => Some(c),
                 Err(_) => None
-            }
+            },
+            frame_number: Arc::new(AtomicU64::new(0))
         };
 
         event_manager
@@ -64,17 +67,26 @@ impl BlastEventManager {
     /// Start the event thread
     pub async fn start(&mut self, sender: Sender<BlastEvent>) -> Result<(), Error> {
         self.running.store(true, Ordering::SeqCst);
-        let mut frame_num = 0;
+        self.frame_number.store(0, Ordering::SeqCst);
         loop {
             // Make sure the blast simulation is still running and exit when it has shutdown
             if !self.running.load(Ordering::SeqCst) {
+                self.frame_number.store(0, Ordering::SeqCst);
                 break;
             }
 
-            log::info!("BlastEventManager running frame number {}", frame_num);
+            let frame = self.frame_number.load(Ordering::SeqCst);
+
+            if frame >= crate::TOTAL_FRAMES {
+                self.running.store(false, Ordering::SeqCst);
+                self.frame_number.store(0, Ordering::SeqCst);
+                break;
+            }
+
+            log::info!("BlastEventManager running frame number {}", frame);
 
             // If it is time to mine new bocks, use the bitcoind RPC client to generate new blocks
-            if frame_num % MINE_RATE == 0 {
+            if frame % MINE_RATE == 0 {
                 match crate::mine_blocks(&mut self.bitcoin_rpc, BLOCKS_PER_MINE) {
                     Ok(_) => {},
                     Err(e) => return Err(anyhow::Error::msg(e)),
@@ -82,8 +94,8 @@ impl BlastEventManager {
             }
 
             // If there are events to run this frame, get the list of events and send them
-            if self.events.contains_key(&frame_num) {
-                let current_events = &self.events[&frame_num];
+            if self.events.contains_key(&frame) {
+                let current_events = &self.events[&frame];
                 let current_events_iter = current_events.iter();
                 for e in current_events_iter {
                     log::info!("BlastEventManager sending event {}", e);
@@ -94,7 +106,7 @@ impl BlastEventManager {
             }
 
             // Wait until the next frame
-            frame_num = frame_num + 1;
+            self.frame_number.fetch_add(1, Ordering::SeqCst);
             tokio::time::sleep(Duration::from_secs(FRAME_RATE)).await;
         }
         Ok(())
@@ -104,6 +116,14 @@ impl BlastEventManager {
     pub fn stop(&mut self) {
         log::info!("BlastEventManager stopping simulation.");
         self.running.store(false, Ordering::SeqCst);
+    }
+
+    /// Reset the event manager when the current blast network is shutdown
+    pub fn reset(&mut self) {
+        log::info!("BlastEventManager resetting.");
+        self.running.store(false, Ordering::SeqCst);
+        self.events.clear();
+        self.frame_number.store(0, Ordering::SeqCst);
     }
 
     /// Get all of the events in json format
@@ -215,6 +235,11 @@ impl BlastEventManager {
         }
 
         events
+    }
+
+    /// Get the current frame number
+    pub fn get_frame_number(&self) -> u64 {
+        self.frame_number.load(Ordering::SeqCst)
     }
 
     /// Validate that the correct args were given

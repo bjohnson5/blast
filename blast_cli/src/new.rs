@@ -96,7 +96,7 @@ impl BlastTab for NewTab {
         0
     }
 
-    fn update_runtime_data(&mut self) {
+    fn update_runtime_data(&mut self, _: Option<Vec<String>>, _: Option<Vec<String>>, _: Option<Vec<String>>, _: u64, _: u64, _: f64) {
         return;
     }
 

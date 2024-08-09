@@ -96,7 +96,7 @@ pub trait BlastTab {
     fn close(&mut self);
     fn process(&mut self, key: KeyEvent) -> ProcessResult;
     fn get_index(&self) -> usize;
-    fn update_runtime_data(&mut self);
+    fn update_runtime_data(&mut self, events: Option<Vec<String>>, activity: Option<Vec<String>>, stats: Option<Vec<String>>, frame: u64, num_frames: u64, succes_rate: f64);
     fn update_config_data(&mut self, data1: Option<Vec<String>>, data2: Option<Vec<String>>, data3: Option<Vec<String>>, data4: Option<Vec<String>>);
     fn esc_operation(&mut self) -> ProcessResult;
 }

@@ -315,7 +315,15 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
         }
 
         if last_tick.elapsed() >= tick_rate {
-            current.update_runtime_data();
+            let blast_stats = blast_cli.blast.get_stats().await;
+            match blast_stats {
+                Some(s) => {
+                    let events_list: Vec<String> = blast_cli.blast.get_events();
+                    let activity_list: Vec<String> = blast_cli.blast.get_activity();
+                    current.update_runtime_data(Some(events_list), Some(activity_list), Some(s.stats), s.frame, s.total_frames, s.success_rate);
+                },
+                None => {}
+            }
             last_tick = Instant::now();
         }
     }

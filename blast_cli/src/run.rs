@@ -20,34 +20,20 @@ pub struct RunTab {
     pub progress: f64,
     pub window: [f64; 2],
     pub success_rate_data: [(f64, f64); 21],
-    add: bool
+    pub points: usize
 }
 
 impl RunTab {
     pub fn new() -> Self {
-        // TODO: this is a placeholder, initialize with the actual saved simulations
-        let mut events_list: Vec<String> = Vec::new();
-        let mut activity_list: Vec<String> = Vec::new();
-        let mut stats_list: Vec<String> = Vec::new();
-        events_list.push(String::from("10s OpenChannel (blast_lnd0000 --> blast_lnd0001: 2000msat)"));
-        events_list.push(String::from("20s CloseChannel (0)"));
-        activity_list.push(String::from("blast_ldk0000 --> blast_lnd0004: 2000msat, 5s"));
-        activity_list.push(String::from("blast_ldk0001 --> blast_lnd0005: 1000msat, 15s"));
-        activity_list.push(String::from("blast_ldk0002 --> blast_lnd0006: 8000msat, 10s"));
-        activity_list.push(String::from("blast_ldk0003 --> blast_lnd0007: 5000msat, 25s"));
-        stats_list.push(String::from("Number of Nodes:          15"));
-        stats_list.push(String::from("Total Payment Attempts:   76"));
-        stats_list.push(String::from("Payment Success Rate:     100%"));
-
         Self {
-            events: StatefulList::with_items(events_list),
-            activity: StatefulList::with_items(activity_list),
-            stats: StatefulList::with_items(stats_list),
+            events: StatefulList::with_items(Vec::new()),
+            activity: StatefulList::with_items(Vec::new()),
+            stats: StatefulList::with_items(Vec::new()),
             current_section: RunSection::Events,
             progress: 0.0,
             window: [0.0, 20.0],
             success_rate_data: [(0.0, 0.0); 21],
-            add: true
+            points: 0
         }
     }
 }
@@ -77,7 +63,7 @@ impl BlastTab for RunTab {
             .block(Block::new().title("Simulation Progress:"))
             .filled_style(Style::default().fg(Color::LightBlue))
             .line_set(symbols::line::THICK)
-            .ratio(self.progress/100.0);
+            .ratio(self.progress);
         frame.render_widget(line_gauge, layout[1]);
     
         let layout2 = Layout::new(
@@ -244,22 +230,30 @@ impl BlastTab for RunTab {
         3
     }
 
-    fn update_runtime_data(&mut self) {
-        self.progress = self.progress + 1.0;
-        self.window[0] += 1.0;
-        self.window[1] += 1.0;
-        for i in 0..20 {
-            self.success_rate_data[i] = self.success_rate_data[i + 1];
-        }
+    fn update_runtime_data(&mut self, events: Option<Vec<String>>, activity: Option<Vec<String>>, stats: Option<Vec<String>>, frame: u64, num_frames: u64, succes_rate: f64) {
+        self.events.items = events.unwrap_or(Vec::new());
+        self.activity.items = activity.unwrap_or(Vec::new());
+        self.stats.items = stats.unwrap_or(Vec::new());
 
-        if self.add {
-            self.success_rate_data[20] = (self.window[1], self.success_rate_data[19].1 + 5.0);
+        if frame >= num_frames {
+            self.progress = 1.0;
         } else {
-            self.success_rate_data[20] = (self.window[1], self.success_rate_data[19].1 - 5.0);
+            self.progress = frame as f64 / num_frames as f64;
         }
 
-        if self.window[1] % 10.0 == 0.0 {
-            self.add = !self.add;
+        if self.points <= 20 {
+            self.window[0] = 0.0;
+            self.window[1] = 20.0;
+            self.success_rate_data[self.points] = (frame as f64, succes_rate);
+            self.points += 1;
+        } else {
+            self.window[0] = frame as f64 - 20.0;
+            self.window[1] = frame as f64;
+            for i in 0..20 {
+                self.success_rate_data[i] = self.success_rate_data[i + 1];
+            }
+    
+            self.success_rate_data[20] = (frame as f64, succes_rate);
         }
     }
 
