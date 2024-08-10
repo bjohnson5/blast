@@ -166,6 +166,7 @@ impl BlastTab for RunTab {
         self.window[0] = 0.0;
         self.window[1] = 20.0;
         self.success_rate_data = [(0.0, 0.0); 21];
+        self.points = 0;
     }
 
     fn process(&mut self, key: KeyEvent) -> ProcessResult {

@@ -287,7 +287,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     }
 
                                     if failed {
-                                        error = Some(format!("Failed to start the simulation: {:?}", error_str));
+                                        error = Some(format!("Failed to stop the simulation: {:?}", error_str));
                                         mode = Mode::Error;
                                     } else {
                                         current.close();
