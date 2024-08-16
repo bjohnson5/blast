@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 bitcoin = { version = "0.30.1" }
-sim-lib = { git = "https://github.com/bjohnson5/sim-ln", branch = "main" }
+sim-lib = { git = "https://github.com/bjohnson5/sim-ln", branch = "196-sim-results" }
 tokio = { version = "1.37.0", features = ["full"] }
 serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "1.0.104"

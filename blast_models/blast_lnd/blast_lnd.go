@@ -86,8 +86,8 @@ type SimJsonFile struct {
 
 // A channel point struct that is used to close an existing channel
 type ChannelPoint struct {
-	Source string
-	Dest string
+	Source      string
+	Dest        string
 	FundingTxid []byte
 	OutputIndex uint32
 }
@@ -193,7 +193,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 			return err
 		}
 
-		mac := homeDir + MACAROON;
+		mac := homeDir + MACAROON
 
 		// Save off important information about this node
 		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: mac, Cert: blnd.data_dir + "/lnd" + node_id + "/tls.cert"}
@@ -286,7 +286,7 @@ func (blnd *BlastLnd) load_nodes(path string) error {
 			return err
 		}
 
-		mac := homeDir + MACAROON;
+		mac := homeDir + MACAROON
 
 		// Save off important information about this node
 		rpc_port := loadedConfig.RawRPCListeners[0][10:]

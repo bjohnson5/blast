@@ -257,7 +257,7 @@ impl BlastSimLnManager {
 
     /// Reset the simln manager when the current blast network is shutdown
     pub fn reset(&mut self) {
-        log::info!("BlastEventManager resetting.");
+        log::info!("BlastSimlnManager resetting.");
         self.data.activity.clear();
         self.data.nodes.clear();
     }
@@ -275,13 +275,21 @@ impl BlastSimLnManager {
         ids
     }
 
-    pub fn get_success_rate(&self) -> f64 {
-        // TODO implement
-        30.0
+    pub async fn get_success_rate(&self) -> f64 {
+        match &self.sim {
+            Some(s) => {
+                s.get_success_rate().await
+            },
+            None => { 0.0 }
+        }
     }
 
-    pub fn get_attempts(&self) -> u64 {
-        // TODO implement
-        53
+    pub async fn get_attempts(&self) -> u64 {
+        match &self.sim {
+            Some(s) => {
+                s.get_total_payments().await
+            },
+            None => { 0 }
+        }
     }
 }

@@ -439,12 +439,12 @@ impl Blast {
         if f == 0 {
             None
         } else {
-            let sr = self.blast_simln_manager.get_success_rate();
-            let pa = self.blast_simln_manager.get_attempts();
+            let sr = self.blast_simln_manager.get_success_rate().await;
+            let pa = self.blast_simln_manager.get_attempts().await;
             let mut stats_list: Vec<String> = Vec::new();
             stats_list.push(format!("Number of Nodes:          {}", self.get_nodes().len()));
             stats_list.push(format!("Number of Channels:       {}", self.get_channels().await.len()));
-            stats_list.push(format!("Number of Events  :       {}", self.get_events().len()));
+            stats_list.push(format!("Number of Events:         {}", self.get_events().len()));
             stats_list.push(format!("Payment Attempts:         {}", pa));
             stats_list.push(format!("Payment Success Rate:     {}", sr));
 
