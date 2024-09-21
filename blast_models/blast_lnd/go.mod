@@ -8,7 +8,8 @@ require (
 
 require (
 	github.com/jackc/pgx/v5 v5.3.1 // indirect
-	github.com/lightningnetwork/lnd/sqldb v1.0.3 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/lightningnetwork/lnd/sqldb v1.0.4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20231016165738-49dd2c1f3d0b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231030173426-d783a09b4405 // indirect
 )
@@ -85,7 +86,7 @@ require (
 	github.com/jackpal/gateway v1.0.5 // indirect
 	github.com/jackpal/go-nat-pmp v0.0.0-20170405195558-28a68d0c24ad // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
-	github.com/jrick/logrotate v1.0.0 // indirect
+	github.com/jrick/logrotate v1.1.2 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/juju/clock v1.0.3 // indirect
 	github.com/juju/errors v1.0.0 // indirect
@@ -192,7 +193,7 @@ require (
 
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display
 
-replace github.com/lightningnetwork/lnd => github.com/bjohnson5/lnd v0.0.0-20240902190858-43342891e7ce
+replace github.com/lightningnetwork/lnd => github.com/bjohnson5/lnd v0.0.0-20240921135743-3ce7f95afe2f
 
 replace github.com/btcsuite/btcwallet => github.com/bjohnson5/btcwallet v0.0.0-20240902191325-b4a3fb7e32b6
 
