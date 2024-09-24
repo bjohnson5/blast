@@ -5,3 +5,5 @@ Run BLAST Simulations from the command line.
 - `Load` tab will let user choose a sim
 - `Configure` tab will only be accessible when a network is up and running (nodes/models) but the simulation is not running
 - `Run` tab will only be accessible when a network is up and running AND the simulation is running
+
+![](../images/blast_cli.gif)

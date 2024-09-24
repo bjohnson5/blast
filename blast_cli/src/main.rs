@@ -28,9 +28,11 @@ mod new;
 mod load;
 mod configure;
 mod run;
+mod wait;
 mod blast_cli;
 use crate::shared::*;
 use crate::blast_cli::*;
+use crate::wait::WaitTab;
 
 /// The log file for blast
 pub const BLAST_LOG_FILE: &str = ".blast/blast.log";
@@ -157,6 +159,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                         _ => {
                             match current.process(key) {
                                 ProcessResult::StartNetwork(models) => {
+                                    let mut w = WaitTab{message: String::from("Starting BLAST Network...")};
+                                    terminal.draw(|f| ui(f, &mut w, None))?;
+
                                     running.store(true, Ordering::SeqCst);
                                     let mut m = HashMap::new();
                                     for model in models {
@@ -180,6 +185,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     };
                                 },
                                 ProcessResult::LoadNetwork(sim) => {
+                                    let mut w = WaitTab{message: String::from("Loading BLAST Network...")};
+                                    terminal.draw(|f| ui(f, &mut w, None))?;
+
                                     running.store(true, Ordering::SeqCst);
                                     match blast_cli.blast.load(&sim, running.clone()).await {
                                         Ok(mut m) => {
@@ -199,6 +207,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     };
                                 }
                                 ProcessResult::StartSim => {
+                                    let mut w = WaitTab{message: String::from("Starting BLAST Simulation...")};
+                                    terminal.draw(|f| ui(f, &mut w, None))?;
+
                                     let mut failed = false;
                                     let mut error_str = String::from("");
                                     // Finalize the simulation and make it ready to run
@@ -230,6 +241,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     }
                                 },
                                 ProcessResult::StopNetwork => {
+                                    let mut w = WaitTab{message: String::from("Stopping BLAST Network...")};
+                                    terminal.draw(|f| ui(f, &mut w, None))?;
+
                                     // Stop the models
                                     match blast_cli.blast.stop_network().await {
                                         Ok(_) => {},
@@ -264,6 +278,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     }
                                 },
                                 ProcessResult::StopSim => {
+                                    let mut w = WaitTab{message: String::from("Stopping BLAST Simulation...")};
+                                    terminal.draw(|f| ui(f, &mut w, None))?;
+
                                     // Stop the blast simulation
                                     blast_cli.blast.stop_simulation();
 
