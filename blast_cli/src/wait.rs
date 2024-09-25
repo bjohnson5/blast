@@ -49,4 +49,8 @@ impl BlastTab for WaitTab {
     fn esc_operation(&mut self) -> ProcessResult {
         ProcessResult::ExitPage
     }
+
+    fn quit_operation(&mut self) -> ProcessResult {
+        ProcessResult::NoOp
+    }
 }

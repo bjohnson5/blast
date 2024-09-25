@@ -144,7 +144,12 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                     match key.code {
                         // Quit the BlastCli
                         KeyCode::Char('q') => {
-                            return Ok(());
+                            match current.quit_operation() {
+                                ProcessResult::Quit => {
+                                    return Ok(());
+                                },
+                                _ => {}
+                            }
                         }
                         KeyCode::Esc => {
                             match current.esc_operation() {
@@ -393,11 +398,27 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> {
     let mut output: Vec<String> = Vec::new();
     let mut words = cmd.split_whitespace();
-    
-    // TODO: error handling and easier use of command parameters
 
     if let Some(first_word) = words.next() {
         match first_word {
+            "help" => {
+                output.push(String::from("Command           Parameters "));
+                output.push(String::from("-----------------------------"));
+                output.push(String::from("save              simulation_name"));
+                output.push(String::from("add_activity      source_node dest_node start_secs count interval amount"));
+                output.push(String::from("add_event         frame event_type event_args ..."));
+                output.push(String::from("get_nodes"));
+                output.push(String::from("get_pub_key       node_name"));
+                output.push(String::from("list_peers        node_name"));
+                output.push(String::from("wallet_balance    node_name"));
+                output.push(String::from("channel_balance   node_name"));
+                output.push(String::from("list_channels     node_name"));
+                output.push(String::from("open_channel"));
+                output.push(String::from("close_channel"));
+                output.push(String::from("connect_peer"));
+                output.push(String::from("disconnect_peer"));
+                output.push(String::from("fund_node"));
+            }
             "save" => {
                 match blast.save(words.next().unwrap_or("simulation1")).await {
                     Ok(()) => {
@@ -445,8 +466,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                     event_args.push(String::from(w));
                 }
 
+                // TODO: easier use event command parameters
                 let args = if event_args.len() == 0 { None } else { Some(event_args) };
-
                 match blast.add_event(frame, &event, args) {
                     Ok(()) => {
                         output.push(String::from("Successfully added event."));

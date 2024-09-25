@@ -141,6 +141,8 @@ impl BlastTab for ConfigureTab {
             " command to stop network, ".into(),
             "start".bold(),
             " command to start simulation, ".into(),
+            "help".bold(),
+            " command to show commands,".into(),
             "Tab".bold(),
             " to change sections".into()
         ];
@@ -330,6 +332,10 @@ impl BlastTab for ConfigureTab {
     }
 
     fn esc_operation(&mut self) -> ProcessResult {
+        ProcessResult::NoOp
+    }
+
+    fn quit_operation(&mut self) -> ProcessResult {
         ProcessResult::NoOp
     }
 }

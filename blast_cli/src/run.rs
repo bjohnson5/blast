@@ -48,8 +48,6 @@ impl BlastTab for RunTab {
     
         let msg = vec![
             "Press ".into(),
-            "q".bold(),
-            " to exit, ".into(),
             "s".bold(),
             " to stop sim, ".into(),
             "Tab".bold(),
@@ -263,6 +261,10 @@ impl BlastTab for RunTab {
     }
 
     fn esc_operation(&mut self) -> ProcessResult {
+        ProcessResult::NoOp
+    }
+
+    fn quit_operation(&mut self) -> ProcessResult {
         ProcessResult::NoOp
     }
 }

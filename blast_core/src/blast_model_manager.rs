@@ -434,8 +434,11 @@ impl BlastModelManager {
                 }
             };
 
-            let mut c: Vec<String> = response.get_ref().channels.split(',').map(|s| s.trim().to_string()).collect();
-            chans.append(&mut c);
+            let chan_string = response.get_ref().channels.clone();
+            if chan_string != "" {
+                let mut c: Vec<String> = chan_string.split(',').map(|s| s.trim().to_string()).collect();
+                chans.append(&mut c);
+            }
         }
 
         chans

@@ -229,7 +229,15 @@ func (s *BlastRpcServer) CloseChannel(ctx context.Context, request *pb.BlastClos
 	return response, err_val
 }
 
+// Create a comma separated list of open channels that this model has control over
 func (s *BlastRpcServer) GetModelChannels(ctx context.Context, request *pb.BlastGetModelChannelsRequest) (*pb.BlastGetModelChannelsResponse, error) {
+	if len(s.blast_lnd.open_channels) == 0 {
+		response := &pb.BlastGetModelChannelsResponse{
+			Channels: "",
+		}
+		return response, nil
+	}
+
 	var sb strings.Builder
 	for key, value := range s.blast_lnd.open_channels {
 		sb.WriteString(fmt.Sprintf("%s: %s -> %s,", key, value.Source, value.Dest))

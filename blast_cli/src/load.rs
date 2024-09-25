@@ -92,4 +92,8 @@ impl BlastTab for LoadTab {
     fn esc_operation(&mut self) -> ProcessResult {
         ProcessResult::ExitPage
     }
+
+    fn quit_operation(&mut self) -> ProcessResult {
+        ProcessResult::Quit
+    }
 }
