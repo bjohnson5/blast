@@ -413,11 +413,11 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 output.push(String::from("wallet_balance    node_name"));
                 output.push(String::from("channel_balance   node_name"));
                 output.push(String::from("list_channels     node_name"));
-                output.push(String::from("open_channel"));
-                output.push(String::from("close_channel"));
-                output.push(String::from("connect_peer"));
-                output.push(String::from("disconnect_peer"));
-                output.push(String::from("fund_node"));
+                output.push(String::from("open_channel      source_node dest_node amount push_amount channel_id"));
+                output.push(String::from("close_channel     source_node channel_id"));
+                output.push(String::from("connect_peer      source_node dest_node"));
+                output.push(String::from("disconnect_peer   source_node dest_node"));
+                output.push(String::from("fund_node         source_node"));
             }
             "save" => {
                 match blast.save(words.next().unwrap_or("simulation1")).await {
@@ -530,12 +530,72 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                     }
                 }
             },
-            // TODO implement commands
-            "open_channel" => output.push(String::from(first_word)),
-            "close_channel" => output.push(String::from(first_word)),
-            "connect_peer" => output.push(String::from(first_word)),
-            "disconnect_peer" => output.push(String::from(first_word)),
-            "fund_node" => output.push(String::from(first_word)),
+            "open_channel" => {
+                let source = String::from(words.next().unwrap_or(""));
+                let dest = String::from(words.next().unwrap_or(""));
+                let amount = match words.next().unwrap_or("").parse::<i64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 30000 } // TODO set a default and log it to the output
+                };
+                let push = match words.next().unwrap_or("").parse::<i64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 0 } // TODO set a default and log it to the output
+                };
+                let chan_id = match words.next().unwrap_or("").parse::<i64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 0 } // TODO set a default and log it to the output
+                };
+
+                match blast.open_channel(source, dest, amount, push, chan_id, true).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("{}", format!("Unable to open channel: {}", e));
+                    }
+                }
+            },
+            "close_channel" => {
+                let source = String::from(words.next().unwrap_or(""));
+                let chan_id = match words.next().unwrap_or("").parse::<i64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 0 } // TODO set a default and log it to the output
+                };
+
+                match blast.close_channel(source, chan_id).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("{}", format!("Unable to open channel: {}", e));
+                    }
+                }                
+            },
+            "connect_peer" => {
+                let source = String::from(words.next().unwrap_or(""));
+                let dest = String::from(words.next().unwrap_or(""));
+                match blast.connect_peer(source, dest).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("{}", format!("Unable to connect peers: {}", e));
+                    }
+                }
+            },
+            "disconnect_peer" => {
+                let source = String::from(words.next().unwrap_or(""));
+                let dest = String::from(words.next().unwrap_or(""));
+                match blast.disconnect_peer(source, dest).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("{}", format!("Unable to disconnect peers: {}", e));
+                    }
+                }
+            },
+            "fund_node" => {
+                let source = String::from(words.next().unwrap_or(""));
+                match blast.fund_node(source, true).await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("{}", format!("Unable to fund node: {}", e));
+                    }
+                }
+            },
             _ => output.push(String::from("Unknown command")),
         }
     }
