@@ -4,6 +4,8 @@ use ratatui::{
     widgets::*,
 };
 
+use textwrap;
+
 use crate::shared::*;
 
 #[derive(PartialEq,Clone)]
@@ -168,9 +170,17 @@ impl BlastTab for ConfigureTab {
             }
             _ => {}
         }
-    
-        let messages: Vec<ListItem> = self
-            .messages
+
+        let mut out: Vec<String> = Vec::new();
+        let width: usize = messages_area.width.into();
+        for s in &self.messages {
+            let wrapped_text = textwrap::wrap(s, width);
+            for line in wrapped_text {
+                out.push(line.to_string());
+            }
+        }
+
+        let messages: Vec<ListItem> = out
             .iter()
             .enumerate()
             .map(|(_, m)| {
