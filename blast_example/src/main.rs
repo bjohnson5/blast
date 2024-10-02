@@ -6,15 +6,27 @@ use std::io::{stdin, stdout, Read, Write};
 use std::time::Duration;
 use std::thread;
 use std::env;
+use std::path::PathBuf;
 
 // Extra dependencies
 use ctrlc;
+use simple_logger::SimpleLogger;
+use log::LevelFilter;
 
 // Blast libraries
 use blast_core::Blast;
 
 #[tokio::main]
 async fn main() {
+    let home = env::var("HOME").expect("HOME environment variable not set");
+    let folder_path = PathBuf::from(home).join(".blast/");
+    std::fs::create_dir_all(folder_path.display().to_string()).unwrap();
+
+    SimpleLogger::new()
+    .with_level(LevelFilter::Info)
+    .init()
+    .unwrap();
+
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
         load_simulation(args[1].clone()).await;
@@ -36,7 +48,7 @@ async fn new_simulation() {
     // Create the blast core object
     let mut blast = Blast::new();
 
-    // Control Flow: 
+    // Control Flow:
     // create_network -- starts models and nodes OR load network
     // ** user can now add activity, events, interact with nodes, connect outside nodes, etc...
     // finalize_simulation -- gets the simulation ready to be run
@@ -277,7 +289,7 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- ADD ACTIVITY / EVENTS -----------------------------------------------");
 
-    blast.add_activity("blast_lnd-0000", "blast_lnd-0001", 0, None, 1, 2000);
+    blast.add_activity("blast_lnd-0000", "blast_lnd-0001", None, None, 1, 2000);
 
     let mut good_start = Vec::new();
     good_start.push(String::from("node1"));
@@ -393,7 +405,7 @@ async fn new_simulation() {
             }
         }
 
-        blast.add_activity("blast_lnd-0000", &param.clone(), 0, None, 1, 2000);
+        blast.add_activity("blast_lnd-0000", &param.clone(), None, None, 1, 2000);
     }
 
     // Print information about the updated network

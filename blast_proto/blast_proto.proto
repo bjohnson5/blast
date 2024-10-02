@@ -13,6 +13,7 @@ service BlastRpc {
     rpc ListChannels (BlastListChannelsRequest) returns (BlastListChannelsResponse) {}
     rpc OpenChannel (BlastOpenChannelRequest) returns (BlastOpenChannelResponse) {}
     rpc CloseChannel (BlastCloseChannelRequest) returns (BlastCloseChannelResponse) {}
+    rpc GetModelChannels (BlastGetModelChannelsRequest) returns (BlastGetModelChannelsResponse) {}
     rpc ConnectPeer (BlastConnectRequest) returns (BlastConnectResponse) {}
     rpc DisconnectPeer (BlastDisconnectRequest) returns (BlastDisconnectResponse) {}
     rpc GetBtcAddress(BlastBtcAddressRequest) returns (BlastBtcAddressResponse) {}
@@ -96,6 +97,13 @@ message BlastCloseChannelRequest {
 
 message BlastCloseChannelResponse {
     bool success = 1;
+}
+
+message BlastGetModelChannelsRequest {
+}
+
+message BlastGetModelChannelsResponse {
+    string channels = 1;
 }
 
 message BlastConnectRequest {

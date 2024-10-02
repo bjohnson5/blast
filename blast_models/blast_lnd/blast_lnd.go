@@ -60,7 +60,7 @@ neutrino.connect=localhost:18444`
 const MODEL_NAME string = "blast_lnd"
 
 // The directory to save simulations
-const SIM_DIR string = "/home/blast_sims/"
+const SIM_DIR string = "/.blast/blast_sims/"
 
 // The temporary directory to save runtime lnd data
 const DATA_DIR string = "blast_data"
@@ -69,7 +69,7 @@ const DATA_DIR string = "blast_data"
 const RPC_ADDR string = "localhost:5050"
 
 // The default macaroon file
-const MACAROON string = "/home/admin.macaroon"
+const MACAROON string = "/.blast/admin.macaroon"
 
 // The data that is stored in the sim-ln sim.json file
 type SimLnNode struct {
@@ -86,6 +86,8 @@ type SimJsonFile struct {
 
 // A channel point struct that is used to close an existing channel
 type ChannelPoint struct {
+	Source      string
+	Dest        string
 	FundingTxid []byte
 	OutputIndex uint32
 }
@@ -186,8 +188,15 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 			return err
 		}
 
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+
+		mac := homeDir + MACAROON
+
 		// Save off important information about this node
-		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: MACAROON, Cert: blnd.data_dir + "/lnd" + node_id + "/tls.cert"}
+		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: mac, Cert: blnd.data_dir + "/lnd" + node_id + "/tls.cert"}
 		node_list.Nodes = append(node_list.Nodes, n)
 		blnd.listen_addresses[alias] = "localhost:" + listen_port
 		blnd.rpc_addresses[alias] = "https://" + "127.0.0.1:" + rpc_port
@@ -272,12 +281,19 @@ func (blnd *BlastLnd) load_nodes(path string) error {
 			return err
 		}
 
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+
+		mac := homeDir + MACAROON
+
 		// Save off important information about this node
 		rpc_port := loadedConfig.RawRPCListeners[0][10:]
 		listen_port := loadedConfig.RawListeners[0]
 		blnd.listen_addresses[alias] = "localhost:" + listen_port
 		blnd.rpc_addresses[alias] = "https://" + "127.0.0.1:" + rpc_port
-		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: MACAROON, Cert: blnd.data_dir + "/" + name + "/tls.cert"}
+		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: mac, Cert: blnd.data_dir + "/" + name + "/tls.cert"}
 		node_list.Nodes = append(node_list.Nodes, n)
 		ln := LoadedNode{alias: alias, loadedConfig: loadedConfig, implCfg: implCfg, shutdownInterceptor: shutdownInterceptor, listen_port: listen_port, rpc_port: rpc_port}
 		loaded_nodes = append(loaded_nodes, ln)

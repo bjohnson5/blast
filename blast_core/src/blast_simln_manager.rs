@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::BufReader;
 use std::fs;
+use std::env;
 
 // Extra dependencies
 use serde::{Serialize, Deserialize};
@@ -26,7 +27,7 @@ pub const EXPECTED_PAYMENT_AMOUNT: u64 = 3_800_000;
 pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
 
 /// The directory to write the sim-ln results to
-pub const RESULTS_DIR: &str = "/home/blast_results";
+pub const RESULTS_DIR: &str = ".blast/blast_results";
 
 /// The BlastSimLnManager holds the main sim-ln Simulation object and the current node and activity data that sim-ln uses
 #[derive(Clone)]
@@ -59,9 +60,27 @@ impl BlastSimLnManager {
     }
 
     /// Create payment activity for the simulation
-    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: u16, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
+    pub fn add_activity(&mut self, source: &str, destination: &str, start_secs: Option<u16>, count: Option<u64>, interval_secs: u16, amount_msat: u64) {
         let a = ActivityParser{source: NodeId::Alias(String::from(source)), destination: NodeId::Alias(String::from(destination)), start_secs: start_secs, count: count, interval_secs: ValueOrRange::Value(interval_secs), amount_msat: ValueOrRange::Value(amount_msat)};
         self.data.activity.push(a);
+    }
+
+    /// Get all of the current activity
+    pub fn get_activity(&self) -> Vec<String> {
+        let mut act: Vec<String> = Vec::new();
+        for a in &self.data.activity {
+            let start = match a.start_secs {
+                Some(i) => { i.to_string() },
+                None => { String::from("None") }
+            };
+            let count = match a.count {
+                Some(i) => { i.to_string() },
+                None => { String::from("None") }
+            };
+            act.push(format!("{} {} {} {} {} {}", a.source, a.destination, start, count, a.interval_secs, a.amount_msat));
+        }
+
+        act
     }
 
     /// Add nodes from a json string returned by the model
@@ -185,16 +204,20 @@ impl BlastSimLnManager {
             });
         }
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(RESULTS_DIR);
+
         let sim = Simulation::new(
             clients,
             validated_activities,
-            None,
+            Some(crate::TOTAL_FRAMES as u32),
             EXPECTED_PAYMENT_AMOUNT,
             ACTIVITY_MULTIPLIER,
             Some(WriteResults {
-                results_dir: PathBuf::from(String::from(RESULTS_DIR)),
+                results_dir: folder_path,
                 batch_size: 1,
-            })
+            }),
+            None
         );
         self.sim = Some(sim);
         Ok(())
@@ -204,8 +227,11 @@ impl BlastSimLnManager {
     pub async fn start(&self) -> Result<(), Error> {
         log::info!("BlastSimlnManager starting simulation.");
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(RESULTS_DIR);
+
         // Create the results directory if it does not exist
-        match fs::create_dir_all(RESULTS_DIR) {
+        match fs::create_dir_all(folder_path) {
             Ok(_) => {},
             Err(e) => return Err(anyhow!("Error creating results directory: {}", e))
         };
@@ -229,6 +255,13 @@ impl BlastSimLnManager {
         };
     }
 
+    /// Reset the simln manager when the current blast network is shutdown
+    pub fn reset(&mut self) {
+        log::info!("BlastSimlnManager resetting.");
+        self.data.activity.clear();
+        self.data.nodes.clear();
+    }
+
     /// Get all the nodes
     pub fn get_nodes(&self) -> Vec<String> {
         let mut ids = Vec::<String>::new();
@@ -240,5 +273,23 @@ impl BlastSimLnManager {
             ids.push(id);
         }
         ids
+    }
+
+    pub async fn get_success_rate(&self) -> f64 {
+        match &self.sim {
+            Some(s) => {
+                s.get_success_rate().await
+            },
+            None => { 0.0 }
+        }
+    }
+
+    pub async fn get_attempts(&self) -> u64 {
+        match &self.sim {
+            Some(s) => {
+                s.get_total_payments().await
+            },
+            None => { 0 }
+        }
     }
 }

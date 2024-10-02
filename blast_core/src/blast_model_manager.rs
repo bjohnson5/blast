@@ -12,6 +12,8 @@ use std::fs;
 use std::thread;
 use std::time::Duration;
 use std::process::Stdio;
+use std::fs::OpenOptions;
+use std::path::PathBuf;
 
 // Extra dependencies
 use anyhow::Error;
@@ -26,6 +28,8 @@ use crate::blast_proto::*;
 pub mod blast_proto {
     tonic::include_proto!("blast_proto");
 }
+
+pub const BLAST_MODEL_LOG_DIR: &str = ".blast/";
 
 /// The ModelConfig struct defines a blast model and it contains the information from the model.json file
 #[derive(Deserialize, Debug, Clone)]
@@ -123,8 +127,23 @@ impl BlastModelManager {
         current_dir.push("../blast_models/".to_owned()+&model.config.name+"/"+&model.config.start);
         let model_exe = current_dir.to_string_lossy().into_owned();
 
+        let home = env::var("HOME").expect("HOME environment variable not set");
+        let folder_path = PathBuf::from(home).join(BLAST_MODEL_LOG_DIR);
+
         // Run the model executable
-        let child = match Command::new(model_exe).stdout(Stdio::null())
+        let file_stderr = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(folder_path.display().to_string()+&model.config.name+".log")
+            .unwrap();
+        let file_stdout = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(folder_path.display().to_string()+&model.config.name+".log")
+            .unwrap();
+        let child = match Command::new(model_exe).stderr(Stdio::from(file_stderr)).stdout(Stdio::from(file_stdout))
         .spawn() {
             Ok(c) => c,
             Err(_) => {
@@ -233,6 +252,16 @@ impl BlastModelManager {
         } else {
             Err(String::from("Model did not save successfully"))
         }        
+    }
+
+    /// Get a list of the currently available models
+    pub fn get_models(&self) -> Result<Vec<String>, String> {
+        let keys: Vec<String> = self.models.keys().cloned().collect();
+        if keys.is_empty() {
+            Err(String::from("No models available"))
+        } else {
+            Ok(keys)
+        }       
     }
 
     /// Start a given number of nodes for the given model name
@@ -390,6 +419,29 @@ impl BlastModelManager {
         };
         
         Ok(response.get_ref().channels.clone())
+    }
+
+    /// Get all channels for all models
+    pub async fn get_channels(&mut self) -> Vec<String> {
+        let mut chans: Vec<String> = Vec::new();
+
+        for (_, client) in &mut self.models {
+            let request = tonic::Request::new(BlastGetModelChannelsRequest {});
+            let response = match client.rpc_connection.as_mut().unwrap().get_model_channels(request).await {
+                Ok(r) => r,
+                Err(_) => {
+                    continue;
+                }
+            };
+
+            let chan_string = response.get_ref().channels.clone();
+            if chan_string != "" {
+                let mut c: Vec<String> = chan_string.split(',').map(|s| s.trim().to_string()).collect();
+                chans.append(&mut c);
+            }
+        }
+
+        chans
     }
 
     /// Open a channel from node with source_id to node with dest_id for the given amount and with the given chan_id
