@@ -75,7 +75,6 @@ cd blast
 
 # Run
 ### Run CLI
-> There is no CLI yet. This is only a testing application right now, it will run some hard coded blast operations.
 ```bash
 ./run_cli.sh
 ```

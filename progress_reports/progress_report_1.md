@@ -133,3 +133,6 @@ Some basic test code has been written to validate this design, but these compone
 - Perform the profiling process on the completed LND model and compare the results to the original benchmarks.
 - Phase II: Research and develop automation techniques and reproducible network states.
 - Phase III: Integrate the results of Phase I and Phase II into the BLAST tool.
+
+## What was the OpenSats funding used for?
+The grant money was used as part of my income in order to pay for living expenses.
