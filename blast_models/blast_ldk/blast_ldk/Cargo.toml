@@ -1,0 +1,7 @@
+[package]
+name = "blast_ldk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ldk-node = "0.3.0"
