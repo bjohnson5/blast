@@ -46,6 +46,12 @@ tar xzf bitcoin-25.0-x86_64-linux-gnu.tar.gz
 sudo install -m 0755 -o root -g root -t /usr/local/bin bitcoin-25.0/bin/*
 ```
 
+### Install utils
+```bash
+sudo apt install bc
+sudo apt install jq
+```
+
 ### Install Rust
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -71,6 +77,13 @@ export PATH=$PATH:$HOME/go/bin
 git clone git@github.com:bjohnson5/blast.git
 cd blast
 ./build.sh
+```
+
+### Install electrs
+```bash
+git clone https://github.com/blockstream/electrs && cd electrs
+git checkout new-index
+cargo install --path . --root <blast_root_directory>/blast_core
 ```
 
 # Run
