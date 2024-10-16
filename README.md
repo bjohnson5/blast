@@ -83,7 +83,9 @@ cd blast
 ```bash
 git clone https://github.com/blockstream/electrs && cd electrs
 git checkout new-index
-cargo install --path . --root <blast_root_directory>/blast_core
+cargo install --path . --root /usr/local/bin
+rm /usr/local/bin/.crates.toml
+rm /usr/local/bin/crates2.json
 ```
 
 # Run

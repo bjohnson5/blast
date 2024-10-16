@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ldk-node = "0.3.0"
+ldk-node = { git = "https://github.com/bjohnson5/ldk-node", branch = "sim-ldk-node-v0.3.0" }

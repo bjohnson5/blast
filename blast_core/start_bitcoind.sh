@@ -47,4 +47,6 @@ do
 done
 bitcoin-cli generatetoaddress 6 "mp76nrashrCCYLy3a8cAc5HufEas11yHbh"
 
-electrs -vvvv --daemon-dir ~/.bitcoin --network=regtest --cookie user:pass
+electrs -vvvv --daemon-dir ~/.bitcoin --network=regtest --cookie user:pass --db-dir ~/.electrs/db > /dev/null 2>&1 &
+echo $! > electrs_id.txt
+echo "Started electrs with PID: $(cat electrs_id.txt)"
