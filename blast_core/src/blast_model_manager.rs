@@ -427,7 +427,15 @@ impl BlastModelManager {
 
         for (_, client) in &mut self.models {
             let request = tonic::Request::new(BlastGetModelChannelsRequest {});
-            let response = match client.rpc_connection.as_mut().unwrap().get_model_channels(request).await {
+            let connection = match client.rpc_connection.as_mut() {
+                Some(c) => {
+                    c
+                },
+                None => {
+                    continue;
+                }
+            };
+            let response = match connection.get_model_channels(request).await {
                 Ok(r) => r,
                 Err(_) => {
                     continue;

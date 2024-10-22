@@ -170,7 +170,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     running.store(true, Ordering::SeqCst);
                                     let mut m = HashMap::new();
                                     for model in models {
-                                        m.insert(model.name.clone(), model.num_nodes);
+                                        if model.num_nodes > 0 {
+                                            m.insert(model.name.clone(), model.num_nodes);
+                                        }
                                     }
                                     match blast_cli.blast.create_network("test", m, running.clone()).await {
                                         Ok(mut m) => {
