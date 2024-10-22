@@ -79,15 +79,6 @@ cd blast
 ./build.sh
 ```
 
-### Install electrs
-```bash
-git clone https://github.com/blockstream/electrs && cd electrs
-git checkout new-index
-cargo install --path . --root /usr/local/bin
-rm /usr/local/bin/.crates.toml
-rm /usr/local/bin/crates2.json
-```
-
 # Run
 ### Run CLI
 ```bash

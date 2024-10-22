@@ -81,8 +81,7 @@ impl BlastRpc for BlastLdkServer {
 			};
 
 			let mut builder = Builder::from_config(config);
-			builder.set_chain_source_esplora("http://localhost:3002".to_string(), None);
-			//builder.set_gossip_source_rgs("https://rapidsync.lightningdevkit.org/testnet/snapshot".to_string());
+			builder.set_chain_source_bitcoind_rpc(String::from("127.0.0.1"), 18443, String::from("user"), String::from("pass"));
 			builder.set_gossip_source_p2p();
 
 			let node = Arc::new(builder.build().unwrap());
