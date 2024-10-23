@@ -551,7 +551,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.open_channel(source, dest, amount, push, chan_id, true).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to open channel: {}", e));
+                        let msg = format!("Unable to open channel: {}", e);
+                        output.push(msg);
                     }
                 }
             },
@@ -565,7 +566,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.close_channel(source, chan_id).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to open channel: {}", e));
+                        let msg = format!("Unable to open channel: {}", e);
+                        output.push(msg);
                     }
                 }                
             },
@@ -575,7 +577,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.connect_peer(source, dest).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to connect peers: {}", e));
+                        let msg = format!("Unable to connect peers: {}", e);
+                        output.push(msg);
                     }
                 }
             },
@@ -585,7 +588,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.disconnect_peer(source, dest).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to disconnect peers: {}", e));
+                        let msg = format!("Unable to disconnect peers: {}", e);
+                        output.push(msg);
                     }
                 }
             },
@@ -594,7 +598,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.fund_node(source, true).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to fund node: {}", e));
+                        let msg = format!("Unable to fund node: {}", e);
+                        output.push(msg);
                     }
                 }
             },
