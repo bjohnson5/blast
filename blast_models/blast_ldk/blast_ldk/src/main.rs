@@ -11,6 +11,8 @@ use ldk_node::{Builder, LogLevel};
 use ldk_node::bitcoin::Network;
 use ldk_node::config::Config;
 use ldk_node::lightning::ln::msgs::SocketAddress;
+use ldk_node::lightning::routing::gossip::NodeAlias;
+use ldk_node::UserChannelId;
 
 use secp256k1::PublicKey;
 use tonic::{transport::Server, Request, Response, Status};
@@ -47,9 +49,15 @@ struct SimJsonFile {
 	nodes: Vec<SimLnNode>
 }
 
+struct Channel {
+	id: UserChannelId,
+	pk: PublicKey
+}
+
 struct BlastLdk {
     nodes: HashMap<String, Arc<ldk_node::Node>>,
 	simln_data: String,
+	open_channels: HashMap<i64, Channel>,
 	shutdown_sender: Option<oneshot::Sender<()>>
 }
 
@@ -58,6 +66,7 @@ impl BlastLdk {
         Self {
             nodes: HashMap::new(),
 			simln_data: String::from(""),
+			open_channels: HashMap::new(),
 			shutdown_sender: None
         }
     }
@@ -103,6 +112,12 @@ impl BlastRpc for BlastLdkServer {
         data_dir.push_str("/blast_data/");
 		for i in 0..num_nodes {
 			let node_id = prepend_and_pad("blast_ldk-", i);
+			let alias = node_id.as_bytes();
+			// Create an array and fill it with values from the slice
+			let mut alias_array = [0u8; 32]; // Fill with default value 0
+			let len = alias.len().min(alias_array.len()); // Get the minimum length
+			alias_array[..len].copy_from_slice(alias); // Copy the slice into the array
+			let node_alias = NodeAlias(alias_array);
 			let mut listen_addr: Vec<SocketAddress> = Vec::new();
 			let port = self.get_available_port().unwrap();
 			let a = format!("127.0.0.1:{}", port);
@@ -118,7 +133,7 @@ impl BlastRpc for BlastLdkServer {
 				log_dir_path: None,
 				network: Network::Regtest,
 				listening_addresses: Some(listen_addr),
-				node_alias: None,
+				node_alias: Some(node_alias),
 				sending_parameters: None,
 				trusted_peers_0conf: Vec::new(),
 				probing_liquidity_limit_multiplier: 0,
@@ -226,12 +241,59 @@ impl BlastRpc for BlastLdkServer {
 		Ok(response)
 	}
 
-	async fn open_channel(&self, _request: Request<BlastOpenChannelRequest>) -> Result<Response<BlastOpenChannelResponse>, Status> {
-		Err(Status::new(Code::InvalidArgument, "name is invalid"))
+	async fn open_channel(&self, request: Request<BlastOpenChannelRequest>) -> Result<Response<BlastOpenChannelResponse>, Status> {
+		let req = &request.get_ref();
+		let node_id = &req.node;
+		let node = self.get_node(node_id.to_string()).await?;
+		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+			Ok(k) => { k },
+			Err(_) => {
+				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
+			}
+		};
+		let amount = req.amount;
+		let push = req.push_amout;
+		let id = req.channel_id;
+
+		let chan_id = match node.open_announced_channel(peer_pub, SocketAddress::from_str("127.0.0.1:8000").unwrap(), amount as u64, Some(push as u64), None) {
+			Ok(id) => id,
+			Err(_) => {
+				return Err(Status::new(Code::Unknown, format!("Could not open channel.")));
+			}
+		};
+
+		let mut bldk = self.blast_ldk.lock().await;
+		bldk.open_channels.insert(id, Channel{id: chan_id, pk: peer_pub});
+
+		let chan_response = BlastOpenChannelResponse { success: true };
+		let response = Response::new(chan_response);
+		Ok(response)
 	}
 
-	async fn close_channel(&self, _request: Request<BlastCloseChannelRequest>) -> Result<Response<BlastCloseChannelResponse>, Status> {
-		Err(Status::new(Code::InvalidArgument, "name is invalid"))
+	async fn close_channel(&self, request: Request<BlastCloseChannelRequest>) -> Result<Response<BlastCloseChannelResponse>, Status> {
+		let req = &request.get_ref();
+		let node_id = &req.node;
+		let node = self.get_node(node_id.to_string()).await?;
+		let id = req.channel_id;
+
+		let bldk = self.blast_ldk.lock().await;
+		let channel = match bldk.open_channels.get(&id) {
+			Some(c) => c,
+			None => {
+				return Err(Status::new(Code::Unknown, format!("Could not close channel.")));
+			}
+		};
+
+		match node.close_channel(&channel.id, channel.pk) {
+			Ok(_) => {},
+			Err(_) => {
+				return Err(Status::new(Code::Unknown, format!("Could not close channel.")));
+			}
+		}
+
+		let chan_response = BlastCloseChannelResponse { success: true };
+		let response = Response::new(chan_response);
+		Ok(response)
 	}
 
 	async fn get_model_channels(&self, _request: Request<BlastGetModelChannelsRequest>) -> Result<Response<BlastGetModelChannelsResponse>, Status> {
@@ -294,17 +356,29 @@ impl BlastRpc for BlastLdkServer {
 		}
 	}
 
-	async fn get_btc_address(&self, _request: Request<BlastBtcAddressRequest>) -> Result<Response<BlastBtcAddressResponse>, Status> {
-		Err(Status::new(Code::InvalidArgument, "name is invalid"))
+	async fn get_btc_address(&self, request: Request<BlastBtcAddressRequest>) -> Result<Response<BlastBtcAddressResponse>, Status> {
+		let node_id = &request.get_ref().node;
+		let node = self.get_node(node_id.to_string()).await?;
+		
+		let address = match node.onchain_payment().new_address() {
+			Ok(address) => address,
+			Err(_) => {
+				return Err(Status::new(Code::Unknown, "Could not get bitcoin address."));
+			}
+		};
+
+		let addr_response = BlastBtcAddressResponse { address: address.to_string() };
+		let response = Response::new(addr_response);
+		Ok(response)
 	}
 
 	async fn get_listen_address(&self, request: Request<BlastListenAddressRequest>) -> Result<Response<BlastListenAddressResponse>, Status> {
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
 		let addr = match node.config().listening_addresses {
-			Some(a) => { a },
+			Some(a) => a,
 			None => {
-				return Err(Status::new(Code::InvalidArgument, "Could not get listening address."));
+				return Err(Status::new(Code::Unknown, "Could not get listening address."));
 			}
 		};
 
