@@ -50,6 +50,7 @@ struct SimJsonFile {
 }
 
 struct Channel {
+	source: String,
 	id: UserChannelId,
 	pk: PublicKey
 }
@@ -251,8 +252,10 @@ impl BlastRpc for BlastLdkServer {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
 			}
 		};
-		let address = match SocketAddress::from_str(&req.peer_address) {
-			Ok(a) => a,
+		let addr = req.peer_address.clone();
+		let converted_addr = addr.replace("localhost", "127.0.0.1");
+		let peer_addr = match SocketAddress::from_str(&converted_addr) {
+			Ok(a) => { a },
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer address: {:?}", &req.peer_address)));
 			}
@@ -261,7 +264,7 @@ impl BlastRpc for BlastLdkServer {
 		let push = req.push_amout;
 		let id = req.channel_id;
 
-		let chan_id = match node.open_announced_channel(peer_pub, address, amount as u64, Some(push as u64), None) {
+		let chan_id = match node.open_announced_channel(peer_pub, peer_addr, amount as u64, Some(push as u64), None) {
 			Ok(id) => id,
 			Err(_) => {
 				return Err(Status::new(Code::Unknown, format!("Could not open channel.")));
@@ -269,7 +272,7 @@ impl BlastRpc for BlastLdkServer {
 		};
 
 		let mut bldk = self.blast_ldk.lock().await;
-		bldk.open_channels.insert(id, Channel{id: chan_id, pk: peer_pub});
+		bldk.open_channels.insert(id, Channel{source: node_id.to_string(), id: chan_id, pk: peer_pub});
 
 		let chan_response = BlastOpenChannelResponse { success: true };
 		let response = Response::new(chan_response);
@@ -303,7 +306,15 @@ impl BlastRpc for BlastLdkServer {
 	}
 
 	async fn get_model_channels(&self, _request: Request<BlastGetModelChannelsRequest>) -> Result<Response<BlastGetModelChannelsResponse>, Status> {
-		Err(Status::new(Code::InvalidArgument, "name is invalid"))
+		let mut result = String::new();
+		let bldk = self.blast_ldk.lock().await;
+		for (key, value) in &bldk.open_channels {
+			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.pk.to_string()));
+		}
+
+		let chan_response = BlastGetModelChannelsResponse { channels: result };
+		let response = Response::new(chan_response);
+		Ok(response)
 	}
 
 	async fn connect_peer(&self, request: Request<BlastConnectRequest>) -> Result<Response<BlastConnectResponse>, Status> {
