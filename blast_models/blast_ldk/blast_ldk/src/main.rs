@@ -251,11 +251,17 @@ impl BlastRpc for BlastLdkServer {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
 			}
 		};
+		let address = match SocketAddress::from_str(&req.peer_address) {
+			Ok(a) => a,
+			Err(_) => {
+				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer address: {:?}", &req.peer_address)));
+			}
+		};
 		let amount = req.amount;
 		let push = req.push_amout;
 		let id = req.channel_id;
 
-		let chan_id = match node.open_announced_channel(peer_pub, SocketAddress::from_str("127.0.0.1:8000").unwrap(), amount as u64, Some(push as u64), None) {
+		let chan_id = match node.open_announced_channel(peer_pub, address, amount as u64, Some(push as u64), None) {
 			Ok(id) => id,
 			Err(_) => {
 				return Err(Status::new(Code::Unknown, format!("Could not open channel.")));
