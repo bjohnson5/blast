@@ -1,9 +1,11 @@
+// TUI libraries
 use ratatui::{
     crossterm::event::KeyEvent,
     prelude::*,
     widgets::*,
 };
 
+// BLAST constants
 pub const BANNER: &str = r"
    ____  _                _____ _______ 
   |  _ \| |        /\    / ____|__   __|
@@ -14,6 +16,7 @@ pub const BANNER: &str = r"
 
 pub const TAB_TITLES: [&'static str; 4] = ["New", "Load", "Configure", "Run"];
 
+// A list that stores a selected state
 pub struct StatefulList<T> {
     pub state: ListState,
     pub items: Vec<T>,
@@ -60,6 +63,7 @@ impl<T> StatefulList<T> {
     }
 }
 
+// The return values for a tab when a key event is processed
 pub enum ProcessResult {
     StartNetwork(Vec<Model>),
     LoadNetwork(String),
@@ -72,6 +76,10 @@ pub enum ProcessResult {
     NoOp,
 }
 
+// The TUI mode
+// Menu: selecting the top level tabs
+// Page: working on a particular tab
+// Error: displaying an error
 #[derive(PartialEq,Clone)]
 pub enum Mode {
     Menu,
@@ -79,6 +87,7 @@ pub enum Mode {
     Error
 }
 
+// An available model within BLAST
 #[derive(Clone)]
 pub struct Model {
     pub name: String,
@@ -91,6 +100,7 @@ impl<'a> Into<Text<'a>> for Model {
     }
 }
 
+// The trait that all tabs on the TUI must implement
 pub trait BlastTab {
     fn draw(&mut self, frame: &mut Frame, area: Rect);
     fn init(&mut self);

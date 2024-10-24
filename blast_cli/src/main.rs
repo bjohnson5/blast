@@ -1,3 +1,4 @@
+// Standard libraries
 use std::{error::Error, io, time::Instant, time::Duration};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,12 +8,14 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::env;
 
+// Extra Dependencies
 use simplelog::WriteLogger;
 use simplelog::Config;
 use log::LevelFilter;
 use tokio::task::JoinSet;
 use anyhow::Error as AnyError;
 
+// TUI libraries
 use ratatui::{
     crossterm::{
         event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -23,6 +26,7 @@ use ratatui::{
     widgets::*,
 };
 
+// BLAST libraries
 mod shared;
 mod new;
 mod load;
@@ -49,18 +53,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         File::create(folder_path).unwrap(),
     );
 
-    // setup terminal
+    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // create app and run it
+    // Create app and run it
     let cli = BlastCli::new();
     let res = run(&mut terminal, cli).await;
 
-    // restore terminal
+    // Restore terminal
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),

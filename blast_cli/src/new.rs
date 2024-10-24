@@ -1,23 +1,34 @@
+// TUI libraries
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     prelude::*,
     widgets::*,
 };
 
+// BLAST libraries
 use crate::shared::*;
 
+// The New Tab structure
 pub struct NewTab {
     pub models: StatefulList<Model>
 }
 
+// The New Tab is a window that displays the available models and lets the user select the number of nodes for each
 impl BlastTab for NewTab {
+    /// Draw the tab
     fn draw(&mut self, frame: &mut Frame, area: Rect) {
         let layout = Layout::new(
             Direction::Vertical,
             [Constraint::Percentage(25), Constraint::Percentage(5), Constraint::Percentage(70)],
         )
         .split(area);
-    
+
+        // layout[0] The top of the window show the BLAST banner
+        frame.render_widget(
+            Paragraph::new(BANNER), layout[0]
+        );
+
+        // layout[1] The help message
         let msg = vec![
             "Press ".into(),
             "q".bold(),
@@ -30,11 +41,8 @@ impl BlastTab for NewTab {
         let text = Text::from(Line::from(msg)).patch_style(Style::default());
         let help_message = Paragraph::new(text);
         frame.render_widget(help_message, layout[1]);
-    
-        frame.render_widget(
-            Paragraph::new(BANNER), layout[0]
-        );
-    
+
+        // layout[2] The list of available models
         let tasks: Vec<ListItem> = self
         .models
         .items
@@ -50,14 +58,17 @@ impl BlastTab for NewTab {
         frame.render_stateful_widget(tasks, layout[2], &mut self.models.state);
     }
 
+    /// This is called when the new tab is first displayed
     fn init(&mut self) {
         self.models.next();
     }
 
+    /// This is called when the new tab is closing
     fn close(&mut self) {
         self.models.clear();
     }
 
+    /// This is called when a key is pressed while on the new tab
     fn process(&mut self, key: KeyEvent) -> ProcessResult {
         match key.code {
             // Scroll the list of models
@@ -83,9 +94,11 @@ impl BlastTab for NewTab {
                     }
                 }
             }
+            // Start the network
             KeyCode::Enter => {
                 return ProcessResult::StartNetwork(self.models.items.clone());
             }
+            // Ignore all other keys
             _ => {}
         }
 

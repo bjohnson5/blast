@@ -7,6 +7,7 @@ use crate::load::*;
 use crate::configure::*;
 use crate::run::*;
 
+// The BLAST CLI, which is comprised of 4 tabs
 pub struct BlastCli {
     pub new: NewTab,
     pub load: LoadTab,
@@ -20,6 +21,7 @@ impl BlastCli {
         // Create the blast core object
         let blast = Blast::new();
 
+        // Get a list of the available models
         let mut model_list: Vec<Model> = Vec::new();
         match blast.get_available_models() {
             Ok(models) => {
@@ -30,6 +32,7 @@ impl BlastCli {
             Err(_) => {}
         }
 
+        // Get a list of saved sims that can be loaded
         let mut sim_list: Vec<String> = Vec::new();
         match blast.get_available_sims() {
             Ok(sims) => {
@@ -40,6 +43,7 @@ impl BlastCli {
             Err(_) => {}
         }
 
+        // Create the tabs
         let nt = NewTab{models: StatefulList::with_items(model_list)};
         let lt = LoadTab{sims: StatefulList::with_items(sim_list)};
         let ct = ConfigureTab::new();
