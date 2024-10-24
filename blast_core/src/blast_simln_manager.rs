@@ -129,6 +129,9 @@ impl BlastSimLnManager {
         for connection in nodes {
             let node: Arc<Mutex<dyn LightningNode>> = match connection {
                 NodeConnection::LND(c) => {
+                    if c.address.is_empty() {
+                        continue;
+                    }
                     Arc::new(Mutex::new(LndNode::new(c).await?))
                 },
                 NodeConnection::CLN(c) => Arc::new(Mutex::new(ClnNode::new(c).await?)),

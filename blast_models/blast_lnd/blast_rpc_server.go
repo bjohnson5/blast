@@ -245,7 +245,7 @@ func (s *BlastRpcServer) GetModelChannels(ctx context.Context, request *pb.Blast
 
 	result := sb.String()
 	if len(result) > 0 {
-		result = result[:len(result)-2]
+		result = result[:len(result)-1]
 	}
 
 	response := &pb.BlastGetModelChannelsResponse{

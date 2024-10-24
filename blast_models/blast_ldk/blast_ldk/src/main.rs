@@ -367,6 +367,8 @@ impl BlastRpc for BlastLdkServer {
 			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.pk.to_string()));
 		}
 
+		result.pop();
+
 		let chan_response = BlastGetModelChannelsResponse { channels: result };
 		let response = Response::new(chan_response);
 		Ok(response)
