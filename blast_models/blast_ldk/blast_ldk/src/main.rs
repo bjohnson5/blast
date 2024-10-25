@@ -9,6 +9,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::env;
 use std::net::TcpListener;
+use std::path::Path;
 
 // LDK Node libraries
 use ldk_node::bip39::serde::{Deserialize, Serialize};
@@ -30,6 +31,12 @@ use tokio::runtime::Runtime;
 use simplelog::WriteLogger;
 use simplelog::Config as LogConfig;
 use log::LevelFilter;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use tar::Builder as TarBuilder;
+use serde::Serializer;
+use serde::Deserializer;
+use serde::ser::SerializeStruct;
 
 // Blast libraries
 use blast_rpc_server::BlastRpcServer;
@@ -38,6 +45,15 @@ use blast_proto::*;
 pub mod blast_proto {
     tonic::include_proto!("blast_proto");
 }
+
+// The name of this model (should match the name in model.json)
+pub const MODEL_NAME: &str = "blast_ldk";
+
+// The directory to save simulations
+pub const SIM_DIR: &str = "/.blast/blast_sims/";
+
+// The temporary directory to save runtime ldk data
+pub const DATA_DIR: &str = "/blast_data/";
 
 // The data that is stored in the sim-ln sim.json file
 #[derive(Serialize, Deserialize, Debug)]
@@ -59,6 +75,41 @@ struct Channel {
 	source: String,
 	id: UserChannelId,
 	pk: PublicKey
+}
+
+impl Serialize for Channel {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("Channel", 3)?;
+		s.serialize_field("source", &self.source)?;
+		s.serialize_field("id", &self.id.0)?;
+		s.serialize_field("pk", &self.pk)?;
+		s.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Channel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+		#[derive(Deserialize)]
+        struct ChannelHelper {
+			source: String,
+			id: u128,
+			pk: PublicKey
+		}
+
+		let helper = ChannelHelper::deserialize(deserializer)?;
+
+		Ok(Channel {
+			source: helper.source,
+			id: UserChannelId(helper.id),
+			pk: helper.pk
+		})
+    }
 }
 
 // The main data structure for the LDK model
@@ -106,7 +157,7 @@ impl BlastLdkServer {
 	fn get_available_port(&self) -> Option<u16> {
 		(8000..9000).find(|port| self.port_is_available(*port))
 	}
-	
+
 	// Check if a port is available
 	fn port_is_available(&self, port: u16) -> bool {
 		match TcpListener::bind(("127.0.0.1", port)) {
@@ -124,7 +175,7 @@ impl BlastRpc for BlastLdkServer {
 		let num_nodes = request.get_ref().num_nodes;
 		let mut node_list = SimJsonFile{nodes: Vec::new()};
 		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str("/blast_data/");
+        data_dir.push_str(DATA_DIR);
 
 		// Start the requested number of ldk nodes
 		for i in 0..num_nodes {
@@ -495,12 +546,48 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Load a previous state of this model
 	async fn load(&self, _request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
-		Err(Status::new(Code::InvalidArgument, "name is invalid"))
+		// untar data_dir into correct location
+		// count the number of nodes in the sim
+		// start_nodes(num_nodes)
+		// deserialize channels
+		// set the open_channels to the deserialized channels
+
+		let load_response = BlastLoadResponse { success: true };
+		let response = Response::new(load_response);
+		Ok(response)
 	}
 
 	/// Save this models current state
-	async fn save(&self, _request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
-		Err(Status::new(Code::InvalidArgument, "name is invalid"))
+	async fn save(&self, request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
+		let req = &request.get_ref();
+		let sim_name = &req.sim;
+		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let sim_dir = String::from(SIM_DIR);
+		let sim_model_dir = format!("{}{}{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+
+		// Set paths for the archive and JSON file
+		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+
+		// Create the .tar.gz archive
+		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
+        data_dir.push_str("/blast_data/");
+		if let Some(parent) = archive_path.parent() {
+			fs::create_dir_all(parent)?;
+		}
+		let tar_gz = File::create(&archive_path).unwrap();
+		let enc = GzEncoder::new(tar_gz, Compression::default());
+		let mut tar = TarBuilder::new(enc);
+		tar.append_dir_all(".", data_dir).unwrap();
+
+		// Serialize the HashMap to JSON and write to a file
+		let bldk = self.blast_ldk.lock().await;
+		let json_string = serde_json::to_string_pretty(&bldk.open_channels).unwrap();
+		fs::write(&json_path, json_string)?;
+
+		let save_response = BlastSaveResponse { success: true };
+		let response = Response::new(save_response);
+		Ok(response)
 	}
 }
 
