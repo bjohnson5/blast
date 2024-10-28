@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::env;
 use std::net::TcpListener;
 use std::path::Path;
+use std::io::BufReader;
 
 // LDK Node libraries
 use ldk_node::bip39::serde::{Deserialize, Serialize};
@@ -37,6 +38,8 @@ use tar::Builder as TarBuilder;
 use serde::Serializer;
 use serde::Deserializer;
 use serde::ser::SerializeStruct;
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 // Blast libraries
 use blast_rpc_server::BlastRpcServer;
@@ -388,7 +391,7 @@ impl BlastRpc for BlastLdkServer {
 
 		// Get the channel from the model's open channel map
 		let id = req.channel_id;
-		let bldk = self.blast_ldk.lock().await;
+		let mut bldk = self.blast_ldk.lock().await;
 		let channel = match bldk.open_channels.get(&id) {
 			Some(c) => c,
 			None => {
@@ -403,6 +406,9 @@ impl BlastRpc for BlastLdkServer {
 				return Err(Status::new(Code::Unknown, format!("Could not close channel.")));
 			}
 		}
+
+		// Remove the channel from the model's list of open channels
+		bldk.open_channels.remove(&id);
 
 		// Respond to the close channel request
 		let chan_response = BlastCloseChannelResponse { success: true };
@@ -545,12 +551,79 @@ impl BlastRpc for BlastLdkServer {
 	}
 
 	/// Load a previous state of this model
-	async fn load(&self, _request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
-		// untar data_dir into correct location
-		// count the number of nodes in the sim
-		// start_nodes(num_nodes)
-		// deserialize channels
-		// set the open_channels to the deserialized channels
+	async fn load(&self, request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
+		let req = &request.get_ref();
+		let sim_name = &req.sim;
+		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let sim_dir = String::from(SIM_DIR);
+		let sim_model_dir = format!("{}{}{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+
+		// Set paths for the archive and JSON file
+		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+
+		// Open the .tar.gz file
+		let tar_gz = File::open(archive_path)?;
+		let decompressor = GzDecoder::new(tar_gz);
+		let mut archive = Archive::new(decompressor);
+		// Extract the archive into the specified directory
+		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
+        data_dir.push_str(DATA_DIR);
+		let data_path = Path::new(&data_dir);
+		fs::create_dir_all(data_path).unwrap();
+		archive.unpack(data_path).unwrap();
+
+
+		// Count the number of nodes to start and remove the old symlink
+		let mut count = 0;
+        for entry in fs::read_dir(data_path).unwrap() {
+            let entry = match entry {
+				Ok(e) => e,
+				Err(_) => {
+					return Err(Status::new(Code::Unknown, "Could not read the data directory"));
+				}
+			};
+            let path = entry.path();
+
+            // Check if the entry is a directory and if its name starts with blast_ldk-
+            if path.is_dir() {
+                if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if dir_name.starts_with("blast_ldk-") {
+                        count += 1;
+
+                        // Construct the path to the file to remove
+                        let file_path = path.join("logs/ldk_node_latest.log");
+
+                        // Attempt to remove the file if it exists
+                        if file_path.exists() {
+                            match fs::remove_file(&file_path) {
+								Ok(_) => {},
+								Err(_) => {}
+							}
+                        }
+                    }
+                }
+            }
+        }
+		
+		// Attempt to start the nodes
+		let request = BlastStartRequest { num_nodes: count };
+		let start_req = Request::new(request);
+		match self.start_nodes(start_req).await {
+			Ok(_) => {},
+			Err(_) => {
+				return Err(Status::new(Code::Unknown, "Could not start nodes."));
+			}
+		}
+
+		// Open the JSON file
+		let file = File::open(json_path).unwrap();
+		let reader = BufReader::new(file);
+
+		// Deserialize JSON to Channel map
+		let chans: HashMap<i64, Channel> = serde_json::from_reader(reader).unwrap();
+		let mut bldk = self.blast_ldk.lock().await;
+		bldk.open_channels = chans;
 
 		let load_response = BlastLoadResponse { success: true };
 		let response = Response::new(load_response);
@@ -573,7 +646,7 @@ impl BlastRpc for BlastLdkServer {
 		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
         data_dir.push_str("/blast_data/");
 		if let Some(parent) = archive_path.parent() {
-			fs::create_dir_all(parent)?;
+			fs::create_dir_all(parent).unwrap();
 		}
 		let tar_gz = File::create(&archive_path).unwrap();
 		let enc = GzEncoder::new(tar_gz, Compression::default());
