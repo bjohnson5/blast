@@ -1,17 +1,21 @@
+// TUI libraries
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     prelude::*,
     widgets::*,
 };
 
+// BLAST libraries
 use crate::shared::*;
 
+// The different sections of the Run page
 pub enum RunSection {
     Events,
     Activity,
     Stats
 }
 
+// The Run Tab structure
 pub struct RunTab {
     pub events: StatefulList<String>,
     pub activity: StatefulList<String>,
@@ -23,6 +27,7 @@ pub struct RunTab {
     pub points: usize
 }
 
+// The Run Tab is a windows that displays the runtime data to the user as the simulation is executing
 impl RunTab {
     pub fn new() -> Self {
         Self {
@@ -151,11 +156,13 @@ impl BlastTab for RunTab {
         frame.render_widget(chart, layout2[1]);
     }
 
+    /// This is called when the run tab is first displayed
     fn init(&mut self) {
         self.current_section = RunSection::Events;
         self.events.next();
     }
 
+    /// This is called when the run tab is closed
     fn close(&mut self) {
         self.events.clear();
         self.activity.clear();
@@ -167,6 +174,7 @@ impl BlastTab for RunTab {
         self.points = 0;
     }
 
+    /// This is called when a key is pressed while on the run tab
     fn process(&mut self, key: KeyEvent) -> ProcessResult {
         match key.code {
             // The Run page is mainly readonly and will show the status of the running simulation, use `s` to stop the simulation and go back to the Configure page

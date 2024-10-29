@@ -81,9 +81,10 @@ message BlastListChannelsResponse {
 message BlastOpenChannelRequest {
     string node = 1;
     string peer_pub_key = 2;
-    int64 amount = 3;
-    int64 push_amout = 4;
-    int64 channel_id = 5;
+    string peer_address = 3;
+    int64 amount = 4;
+    int64 push_amout = 5;
+    int64 channel_id = 6;
 }
 
 message BlastOpenChannelResponse {

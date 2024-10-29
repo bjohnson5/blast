@@ -1,4 +1,5 @@
 #!/bin/bash
 set -e
 
-echo "blast_ldk not implemented"
+cd blast_ldk
+cargo build

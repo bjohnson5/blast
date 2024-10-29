@@ -427,7 +427,15 @@ impl BlastModelManager {
 
         for (_, client) in &mut self.models {
             let request = tonic::Request::new(BlastGetModelChannelsRequest {});
-            let response = match client.rpc_connection.as_mut().unwrap().get_model_channels(request).await {
+            let connection = match client.rpc_connection.as_mut() {
+                Some(c) => {
+                    c
+                },
+                None => {
+                    continue;
+                }
+            };
+            let response = match connection.get_model_channels(request).await {
                 Ok(r) => r,
                 Err(_) => {
                     continue;
@@ -435,7 +443,7 @@ impl BlastModelManager {
             };
 
             let chan_string = response.get_ref().channels.clone();
-            if chan_string != "" {
+            if !chan_string.is_empty() {
                 let mut c: Vec<String> = chan_string.split(',').map(|s| s.trim().to_string()).collect();
                 chans.append(&mut c);
             }
@@ -447,6 +455,7 @@ impl BlastModelManager {
     /// Open a channel from node with source_id to node with dest_id for the given amount and with the given chan_id
     pub async fn open_channel(&mut self, source_id: String, dest_id: String, amount: i64, push_amount: i64, chan_id: i64) -> Result<(), String> {
         let pub_key = self.get_pub_key(dest_id.clone()).await?;
+        let address = self.get_listen_address(dest_id.clone()).await?;
 
         // Get the model name from the node_id (example node_id: model_name-0000)
         let model_name: String = get_model_from_node(source_id.clone());
@@ -458,6 +467,7 @@ impl BlastModelManager {
         let request = tonic::Request::new(BlastOpenChannelRequest {
             node: source_id,
             peer_pub_key: pub_key,
+            peer_address: address,
             amount: amount,
             push_amout: push_amount,
             channel_id: chan_id

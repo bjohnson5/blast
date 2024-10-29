@@ -1,3 +1,5 @@
 {
-    "name": "blast_ldk"
+    "name": "blast_ldk",
+    "rpc": "localhost:5051",
+    "start": "blast_ldk/target/debug/blast_ldk"
 }

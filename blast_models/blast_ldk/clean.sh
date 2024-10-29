@@ -1,3 +1,6 @@
 #!/bin/bash
 
-echo "blast_ldk not implemented"
+cd blast_ldk
+rm -rf blast_data
+cargo clean
+rm Cargo.lock

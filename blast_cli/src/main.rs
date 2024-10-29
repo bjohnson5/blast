@@ -1,3 +1,4 @@
+// Standard libraries
 use std::{error::Error, io, time::Instant, time::Duration};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,12 +8,14 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::env;
 
+// Extra Dependencies
 use simplelog::WriteLogger;
 use simplelog::Config;
 use log::LevelFilter;
 use tokio::task::JoinSet;
 use anyhow::Error as AnyError;
 
+// TUI libraries
 use ratatui::{
     crossterm::{
         event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -23,6 +26,7 @@ use ratatui::{
     widgets::*,
 };
 
+// BLAST libraries
 mod shared;
 mod new;
 mod load;
@@ -49,18 +53,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         File::create(folder_path).unwrap(),
     );
 
-    // setup terminal
+    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // create app and run it
+    // Create app and run it
     let cli = BlastCli::new();
     let res = run(&mut terminal, cli).await;
 
-    // restore terminal
+    // Restore terminal
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -170,7 +174,9 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                     running.store(true, Ordering::SeqCst);
                                     let mut m = HashMap::new();
                                     for model in models {
-                                        m.insert(model.name.clone(), model.num_nodes);
+                                        if model.num_nodes > 0 {
+                                            m.insert(model.name.clone(), model.num_nodes);
+                                        }
                                     }
                                     match blast_cli.blast.create_network("test", m, running.clone()).await {
                                         Ok(mut m) => {
@@ -549,7 +555,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.open_channel(source, dest, amount, push, chan_id, true).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to open channel: {}", e));
+                        let msg = format!("Unable to open channel: {}", e);
+                        output.push(msg);
                     }
                 }
             },
@@ -563,7 +570,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.close_channel(source, chan_id).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to open channel: {}", e));
+                        let msg = format!("Unable to open channel: {}", e);
+                        output.push(msg);
                     }
                 }                
             },
@@ -573,7 +581,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.connect_peer(source, dest).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to connect peers: {}", e));
+                        let msg = format!("Unable to connect peers: {}", e);
+                        output.push(msg);
                     }
                 }
             },
@@ -583,7 +592,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.disconnect_peer(source, dest).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to disconnect peers: {}", e));
+                        let msg = format!("Unable to disconnect peers: {}", e);
+                        output.push(msg);
                     }
                 }
             },
@@ -592,7 +602,8 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 match blast.fund_node(source, true).await {
                     Ok(_) => {},
                     Err(e) => {
-                        println!("{}", format!("Unable to fund node: {}", e));
+                        let msg = format!("Unable to fund node: {}", e);
+                        output.push(msg);
                     }
                 }
             },

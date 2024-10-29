@@ -1,13 +1,17 @@
+// TUI libraries
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyEventKind},
     prelude::*,
     widgets::*,
 };
 
+// Extra Dependencies
 use textwrap;
 
+// BLAST libraries
 use crate::shared::*;
 
+// The sections of the Configure page
 #[derive(PartialEq,Clone)]
 pub enum ConfigureSection {
     Command,
@@ -16,6 +20,7 @@ pub enum ConfigureSection {
     Activity
 }
 
+// The Configure Tab structure
 pub struct ConfigureTab {
     pub input: String,
     pub history: Vec<String>,
@@ -28,6 +33,7 @@ pub struct ConfigureTab {
     pub current_section: ConfigureSection
 }
 
+// The Configure Tab is a window that displays a CLI and the current state of the test network
 impl ConfigureTab {
     pub fn new() -> Self {
         Self {
@@ -192,10 +198,12 @@ impl BlastTab for ConfigureTab {
         frame.render_widget(messages, messages_area);
     }
 
+    /// This is called when the configure tab is first displayed
     fn init(&mut self) {
         self.current_section = ConfigureSection::Command;
     }
 
+    /// This is called when the configure tab is closed
     fn close(&mut self) {
         self.messages.clear();
         self.input.clear();
@@ -206,6 +214,7 @@ impl BlastTab for ConfigureTab {
         self.history_index = 0;
     }
 
+    /// This is called when a key is pressed while on the configure tab
     fn process(&mut self, key: KeyEvent) -> ProcessResult {
         if key.kind == KeyEventKind::Press {
             match key.code {
@@ -302,7 +311,7 @@ impl BlastTab for ConfigureTab {
                 KeyCode::Down => {
                     match self.current_section {
                         ConfigureSection::Command => {
-                            if self.history_index <= self.history.len() - 1 {
+                            if self.history.len() > 0 && self.history_index <= self.history.len() - 1 {
                                 self.history_index += 1;
                                 self.input = self.history.get(self.history_index).unwrap_or(&String::from("")).to_string();
                                 self.character_index = self.input.len();
