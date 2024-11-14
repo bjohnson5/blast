@@ -53,10 +53,10 @@ pub mod blast_proto {
 pub const MODEL_NAME: &str = "blast_ldk";
 
 // The directory to save simulations
-pub const SIM_DIR: &str = "/.blast/blast_sims/";
+pub const SIM_DIR: &str = ".blast/blast_sims";
 
 // The temporary directory to save runtime ldk data
-pub const DATA_DIR: &str = "/blast_data/";
+pub const DATA_DIR: &str = ".blast/blast_data/blast_ldk";
 
 // The data that is stored in the sim-ln sim.json file
 #[derive(Serialize, Deserialize, Debug)]
@@ -177,8 +177,8 @@ impl BlastRpc for BlastLdkServer {
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
 		let num_nodes = request.get_ref().num_nodes;
 		let mut node_list = SimJsonFile{nodes: Vec::new()};
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str(DATA_DIR);
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 
 		// Start the requested number of ldk nodes
 		for i in 0..num_nodes {
@@ -204,7 +204,7 @@ impl BlastRpc for BlastLdkServer {
 
 			// Create the config for this node
 			let config = Config {
-				storage_dir_path: format!("{}{}", data_dir, node_id),
+				storage_dir_path: format!("{}/{}", data_dir, node_id),
 				log_dir_path: None,
 				network: Network::Regtest,
 				listening_addresses: Some(listen_addr_list),
@@ -541,8 +541,8 @@ impl BlastRpc for BlastLdkServer {
 		}
 		let _ = bldk.shutdown_sender.take().unwrap().send(());
 
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str("/blast_data/");
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let _ = fs::remove_dir_all(data_dir);
 
 		let stop_response = BlastStopModelResponse { success: true };
@@ -556,7 +556,7 @@ impl BlastRpc for BlastLdkServer {
 		let sim_name = &req.sim;
 		let home_dir = env::var("HOME").expect("HOME environment variable not set");
 		let sim_dir = String::from(SIM_DIR);
-		let sim_model_dir = format!("{}{}{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
@@ -567,8 +567,8 @@ impl BlastRpc for BlastLdkServer {
 		let decompressor = GzDecoder::new(tar_gz);
 		let mut archive = Archive::new(decompressor);
 		// Extract the archive into the specified directory
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str(DATA_DIR);
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let data_path = Path::new(&data_dir);
 		fs::create_dir_all(data_path).unwrap();
 		archive.unpack(data_path).unwrap();
@@ -636,15 +636,15 @@ impl BlastRpc for BlastLdkServer {
 		let sim_name = &req.sim;
 		let home_dir = env::var("HOME").expect("HOME environment variable not set");
 		let sim_dir = String::from(SIM_DIR);
-		let sim_model_dir = format!("{}{}{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
 		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
 
 		// Create the .tar.gz archive
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str("/blast_data/");
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		if let Some(parent) = archive_path.parent() {
 			fs::create_dir_all(parent).unwrap();
 		}

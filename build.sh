@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Make blast data dir
+
+# Copy admin.macaroon to blast data dir
+
 # Build the models
 cd blast_models/blast_lnd
 ./build.sh

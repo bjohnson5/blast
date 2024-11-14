@@ -60,16 +60,16 @@ neutrino.connect=localhost:18444`
 const MODEL_NAME string = "blast_lnd"
 
 // The directory to save simulations
-const SIM_DIR string = "/.blast/blast_sims/"
+const SIM_DIR string = ".blast/blast_sims"
 
 // The temporary directory to save runtime lnd data
-const DATA_DIR string = "blast_data"
+const DATA_DIR string = ".blast/blast_data/blast_lnd"
 
 // The Blast RPC address
 const RPC_ADDR string = "localhost:5050"
 
 // The default macaroon file
-const MACAROON string = "/.blast/admin.macaroon"
+const MACAROON string = ".blast/admin.macaroon"
 
 // The data that is stored in the sim-ln sim.json file
 type SimLnNode struct {
@@ -122,9 +122,9 @@ func main() {
 	// Set up the wait group, data directory and shutdown channel for this run
 	var wg sync.WaitGroup
 	shutdown_channel := make(chan struct{})
-	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	dir, err := os.UserHomeDir()
 	if err != nil {
-		blast_lnd_log("Could not get executable directory.")
+		blast_lnd_log("Could not get home directory.")
 		return
 	}
 	blast_data_dir := dir + "/" + DATA_DIR
@@ -193,7 +193,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 			return err
 		}
 
-		mac := homeDir + MACAROON
+		mac := homeDir + "/" + MACAROON
 
 		// Save off important information about this node
 		n := SimLnNode{Id: alias, Address: "localhost:" + rpc_port, Macaroon: mac, Cert: blnd.data_dir + "/lnd" + node_id + "/tls.cert"}
@@ -286,7 +286,7 @@ func (blnd *BlastLnd) load_nodes(path string) error {
 			return err
 		}
 
-		mac := homeDir + MACAROON
+		mac := homeDir + "/" + MACAROON
 
 		// Save off important information about this node
 		rpc_port := loadedConfig.RawRPCListeners[0][10:]

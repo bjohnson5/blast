@@ -359,7 +359,7 @@ func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest)
 		return response, err
 	}
 
-	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+	sim_dir := homeDir + "/" + SIM_DIR + "/" + request.Sim + "/" + MODEL_NAME + "/"
 
 	err = s.blast_lnd.load_nodes(sim_dir + request.Sim + ".tar.gz")
 	if err != nil {
@@ -387,7 +387,7 @@ func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest)
 		return response, err
 	}
 
-	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+	sim_dir := homeDir + "/" + SIM_DIR + "/" + request.Sim + "/" + MODEL_NAME + "/"
 
 	if _, err := os.Stat(sim_dir); os.IsNotExist(err) {
 		os.MkdirAll(sim_dir, 0700)

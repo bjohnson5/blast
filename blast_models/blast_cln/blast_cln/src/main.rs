@@ -39,7 +39,7 @@ pub mod blast_proto {
 }
 
 // The temporary directory to save runtime cln data
-pub const DATA_DIR: &str = "/blast_data/";
+pub const DATA_DIR: &str = ".blast/blast_data/blast_cln";
 
 // The data that is stored in the sim-ln sim.json file
 #[derive(Serialize, Deserialize, Debug)]
@@ -116,8 +116,8 @@ impl BlastRpc for BlastClnServer {
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
 		let num_nodes = request.get_ref().num_nodes;
 		let mut node_list = SimJsonFile{nodes: Vec::new()};
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str(DATA_DIR);
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 
 		// Start the requested number of cln nodes
 		for i in 0..num_nodes {
@@ -125,7 +125,7 @@ impl BlastRpc for BlastClnServer {
 			let node_id = format!("{}{:04}", "blast_cln-", i);
 			let port = self.get_available_port(8000, 9000).unwrap();
 			let rpcport = self.get_available_port(port+1, 9000).unwrap().to_string();
-			let cln_dir = format!("{}{}", data_dir, node_id);
+			let cln_dir = format!("{}/{}", data_dir, node_id);
 			let addr = format!("{}:{}", "https://localhost", rpcport.to_string());
 			let ca_path = format!("{}{}", cln_dir, "/regtest/ca.pem");
 			let client_path = format!("{}{}", cln_dir, "/regtest/client.pem");
@@ -395,8 +395,8 @@ impl BlastRpc for BlastClnServer {
 
 	/// Shutdown the nodes
 	async fn stop_model(&self, _request: Request<BlastStopModelRequest>) -> Result<Response<BlastStopModelResponse>, Status> {
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str(DATA_DIR);
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 
         let mut bcln = self.blast_cln.lock().await;
 		for (id, node) in &bcln.nodes {
@@ -407,7 +407,7 @@ impl BlastRpc for BlastClnServer {
 					let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
 					script_file.push_str("/stop_cln.sh");
 					command.arg(&script_file);
-					command.arg(format!("{}{}", data_dir, id));
+					command.arg(format!("{}/{}", data_dir, id));
 					match command.output() {
 						Ok(_) => {},
 						Err(_e) => return Err(Status::new(Code::InvalidArgument, "Could not stop cln.")),
