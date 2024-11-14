@@ -1,4 +1,5 @@
 #!/bin/bash
 set -e
 
-echo "blast_cln not implemented"
+cd blast_cln
+cargo build

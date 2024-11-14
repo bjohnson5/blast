@@ -271,7 +271,7 @@ impl BlastSimLnManager {
         for n in &self.data.nodes {
             let id = match n {
                 NodeConnection::LND(c) => c.id.to_string(),
-                NodeConnection::CLN(_) => String::from(""),
+                NodeConnection::CLN(c) => c.id.to_string(),
             };
             ids.push(id);
         }

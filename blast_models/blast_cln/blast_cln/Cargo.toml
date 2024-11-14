@@ -1,0 +1,21 @@
+[package]
+name = "blast_cln"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tonic = { version = "0.12.3", features = ["tls"] }
+tokio = { version = "1.37.0", features = ["full"] }
+prost = "0.13.3"
+serde = { version = "1.0.104", features = ["derive"] }
+serde_json = "1.0.104"
+secp256k1 = "0.29.1"
+hex = "0.4.3"
+simplelog = "0.12.2"
+log = "0.4.20"
+tar = "0.4"
+flate2 = "1.0"
+
+[build-dependencies]
+tonic-build = "0.12.3"
+prost-build = "0.13.3"
