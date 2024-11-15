@@ -16,7 +16,7 @@ else
 
     git clone "$DOWNLOAD_URL" "$TARGET_DIR"
     cd "$TARGET_DIR"
-    git checkout v23.11.2
+    git checkout v24.08.2
 
     ./configure
     make

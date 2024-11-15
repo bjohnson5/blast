@@ -48,8 +48,12 @@ sudo install -m 0755 -o root -g root -t /usr/local/bin bitcoin-25.0/bin/*
 
 ### Install utils
 ```bash
-sudo apt install bc
-sudo apt install jq
+sudo apt-get install bc
+sudo apt-get install jq
+sudo apt-get install -y jq autoconf automake build-essential git libtool libsqlite3-dev python3 python3-pip net-tools zlib1g-dev libsodium-dev gettext
+pip3 install --upgrade pip
+pip3 install mako
+pip3 install grpcio-tools
 ```
 
 ### Install Rust
