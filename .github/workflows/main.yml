@@ -6,6 +6,18 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Python
+        - uses: actions/checkout@v4
+        - uses: actions/setup-python@v5
+          with:
+            python-version: '3.13'
+      - name: Install python dependencies
+        run: |
+          pip3 --version
+          pip --version
+          pip3 install --upgrade pip
+          pip3 install mako
+          pip3 install grpcio-tools
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
       - name: Installing protoc-gen-go
