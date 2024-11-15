@@ -10,8 +10,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = prost_build::Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
     let home = env::var("HOME").expect("HOME environment variable not set");
-	let proto_path = PathBuf::from(home.clone()).join(".blast/lightning/cln-grpc/proto/node.proto");
-    let folder_path = PathBuf::from(home.clone()).join(".blast/lightning/cln-grpc/proto");
+	let proto_path = PathBuf::from(home.clone()).join(".blast/clightning/cln-grpc/proto/node.proto");
+    let folder_path = PathBuf::from(home.clone()).join(".blast/clightning/cln-grpc/proto");
     tonic_build::configure().compile_protos_with_config(config, &[proto_path], &[folder_path])?;
 
     Ok(())

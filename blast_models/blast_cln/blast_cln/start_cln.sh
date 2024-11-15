@@ -4,7 +4,7 @@ socket=$1
 socketrpc=$2
 LIGHTNING_DIR=$3
 BITCOIN_DIR="$HOME/.bitcoin"
-CLND="$HOME/.blast/lightning/lightningd/lightningd"
+CLND="$HOME/.blast/clightning/lightningd/lightningd"
 mkdir -p "$LIGHTNING_DIR"
 cat <<- EOF > "$LIGHTNING_DIR/config"
 network=regtest

@@ -2,8 +2,7 @@
 set -e
 
 # Make blast data dir
-
-# Copy admin.macaroon to blast data dir
+mkdir -p "$HOME/.blast"
 
 # Build the models
 cd blast_models/blast_lnd

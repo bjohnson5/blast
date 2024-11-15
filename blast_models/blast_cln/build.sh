@@ -1,9 +1,29 @@
 #!/bin/bash
 set -e
 
-# Check if c-lightning is already cloned and built
-# Clone c-lightning
-# Build c-lightning
+# Define the directory to check
+BLAST_DIR="$HOME/.blast"
+TARGET_DIR="$BLAST_DIR/clightning"
+LIGHTNINGD_FILE="$TARGET_DIR/lightningd/lightningd"
+DOWNLOAD_URL="https://github.com/ElementsProject/lightning.git"
+
+# Check if the 'lightningd' file exists in the specified directory
+if [ -f "$LIGHTNINGD_FILE" ]; then
+    echo "'lightningd' file exists. Exiting."
+    exit 0
+else
+    echo "'lightningd' file not found. Downloading and extracting..."
+
+    git clone "$DOWNLOAD_URL" "$TARGET_DIR"
+    cd "$TARGET_DIR"
+    git checkout v23.11.2
+
+    ./configure
+    make
+
+    echo "Download and extraction complete."
+    cd -
+fi
 
 cd blast_cln
 cargo build
