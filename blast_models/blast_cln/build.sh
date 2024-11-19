@@ -9,8 +9,7 @@ DOWNLOAD_URL="https://github.com/ElementsProject/lightning.git"
 
 # Check if the 'lightningd' file exists in the specified directory
 if [ -f "$LIGHTNINGD_FILE" ]; then
-    echo "'lightningd' file exists. Exiting."
-    exit 0
+    echo "'lightningd' file exists. Skipping."
 else
     echo "'lightningd' file not found. Downloading and extracting..."
 

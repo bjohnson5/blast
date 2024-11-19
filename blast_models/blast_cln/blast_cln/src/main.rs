@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::fs;
 
 // Extra dependencies
-use secp256k1::PublicKey;
 use tonic::{transport::Server, Request, Response, Status};
 use tonic::Code;
 use tokio::sync::Mutex;
@@ -25,6 +24,7 @@ use simplelog::Config as LogConfig;
 use log::LevelFilter;
 use serde::Serialize;
 use serde::Deserialize;
+use amount_or_all::Value;
 use cln::*;
 pub mod cln {
     tonic::include_proto!("cln");
@@ -57,10 +57,19 @@ struct SimJsonFile {
 	nodes: Vec<SimLnNode>
 }
 
+// The data that the CLN model will store about an open channel
+struct ClnChannel {
+	source: String,
+	dest_pk: String,
+	chan_id: String
+}
+
 // The main data structure for the CLN model
 struct BlastCln {
 	nodes: HashMap<String, NodeClient<Channel>>,
 	simln_data: String,
+	addresses: HashMap<String, String>,
+	open_channels: HashMap<i64, ClnChannel>,
     shutdown_sender: Option<oneshot::Sender<()>>
 }
 
@@ -70,6 +79,8 @@ impl BlastCln {
         Self {
 			nodes: HashMap::new(),
 			simln_data: String::from(""),
+			addresses: HashMap::new(),
+			open_channels: HashMap::new(),
             shutdown_sender: None
         }
     }
@@ -178,6 +189,8 @@ impl BlastRpc for BlastClnServer {
 			bcln.nodes.insert(node_id.clone(), client);
 			let n = SimLnNode{id: node_id.clone(), address: addr.clone(), ca_cert: ca_path, client_cert: client_path, client_key: client_key_path};
 			node_list.nodes.push(n);
+
+			bcln.addresses.insert(node_id.clone(), format!("localhost:{}", &port.to_string()));
 		}
 
 		// Serialize the SimLn data into a json string
@@ -210,10 +223,16 @@ impl BlastRpc for BlastClnServer {
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
 
-		// TODO: Format the pub key
-		let pub_key = format!("{:?}", node.getinfo(GetinfoRequest{}).await);
+		let cln_resp = match node.getinfo(GetinfoRequest{}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		};
 
-		let key_response = BlastPubKeyResponse { pub_key: pub_key };
+		let key_response = BlastPubKeyResponse { pub_key: hex::encode(cln_resp.id) };
 		let response = Response::new(key_response);
 		Ok(response)
 	}
@@ -222,9 +241,17 @@ impl BlastRpc for BlastClnServer {
 	async fn list_peers(&self, request: Request<BlastPeersRequest>,) -> Result<Response<BlastPeersResponse>, Status> {
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-		
-		// TODO: Format the peers list
-		let peers = format!("{:?}", node.list_peers(ListpeersRequest{id: None, level: None}).await);
+
+		let cln_resp = match node.list_peers(ListpeersRequest{id: None, level: None}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		};
+
+		let peers = format!("{:?}", cln_resp.peers);
 
 		let peers_response = BlastPeersResponse { peers: peers };
 		let response = Response::new(peers_response);
@@ -233,33 +260,63 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests the wallet balance of a node that is controlled by this model
 	async fn wallet_balance(&self, request: Request<BlastWalletBalanceRequest>) -> Result<Response<BlastWalletBalanceResponse>, Status> {
-		let _node_id = &request.get_ref().node;
+		let node_id = &request.get_ref().node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-        // TODO: Get the balance
+		let cln_resp = match node.list_funds(ListfundsRequest{spent: None}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		};
 
-		let balance_response = BlastWalletBalanceResponse { balance: String::from("") };
+		let balance = format!("{:?}", cln_resp.outputs);
+		
+		let balance_response = BlastWalletBalanceResponse { balance: balance };
 		let response = Response::new(balance_response);
 		Ok(response)
 	}
 
 	/// Blast requests the channel balance of a node that is controlled by this model
 	async fn channel_balance(&self, request: Request<BlastChannelBalanceRequest>) -> Result<Response<BlastChannelBalanceResponse>, Status> {
-		let _node_id = &request.get_ref().node;
+		let node_id = &request.get_ref().node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-        // TODO: Get the balance
+		let cln_resp = match node.list_funds(ListfundsRequest{spent: None}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		};
 
-		let balance_response = BlastChannelBalanceResponse { balance: String::from("") };
+		let balance = format!("{:?}", cln_resp.channels);
+
+		let balance_response = BlastChannelBalanceResponse { balance: balance };
 		let response = Response::new(balance_response);
 		Ok(response)
 	}
 
 	/// Blast requests the list of channels for a node that is controlled by this model
 	async fn list_channels(&self, request: Request<BlastListChannelsRequest>) -> Result<Response<BlastListChannelsResponse>, Status> {
-		let _node_id = &request.get_ref().node;
+		let node_id = &request.get_ref().node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-        // TODO: Get the channels
+		let cln_resp = match node.list_channels(ListchannelsRequest{short_channel_id: None, source: None, destination: None}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		};
 
-		let chan_response = BlastListChannelsResponse { channels: String::from("") };
+		let channels = format!("{:?}", cln_resp.channels);
+
+		let chan_response = BlastListChannelsResponse { channels: channels };
 		let response = Response::new(chan_response);
 		Ok(response)
 	}
@@ -267,28 +324,45 @@ impl BlastRpc for BlastClnServer {
 	/// Blast requests that a node controlled by this model opens a channel
 	async fn open_channel(&self, request: Request<BlastOpenChannelRequest>) -> Result<Response<BlastOpenChannelResponse>, Status> {
 		let req = &request.get_ref();
+		let node_id = &req.node;
+		let peer = &req.peer_pub_key;
+		let peer_pub = hex::decode(peer.to_string()).unwrap();
+		let id = req.channel_id;
+		let amount = req.amount;
+		let push = Amount { msat: req.push_amout as u64 };
 
-		// Get the source node from the id
-		let _node_id = &req.node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-        // Get the peer public key from the request and convert it to a PublicKey object
-		let _peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
-			Ok(k) => k,
-			Err(_) => {
-				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
+		let a = Amount { msat: amount as u64 };
+		let v = Value::Amount(a);
+		let aora = AmountOrAll { value: Some(v) };
+
+		let cln_resp = match node.fund_channel(FundchannelRequest{
+			amount: Some(aora),
+			announce: None,
+			feerate: None,
+			push_msat: Some(push),
+			close_to: None,
+			request_amt: None,
+			compact_lease: None,
+			id: peer_pub,
+			minconf: None,
+			utxos: Vec::new(),
+			mindepth: None,
+			reserve: None,
+			channel_type: Vec::new()
+		}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
 			}
 		};
 
-		// Get the peer address from the request and convert it to a SocketAddress object
-		let addr = req.peer_address.clone();
-		let _converted_addr = addr.replace("localhost", "127.0.0.1");
-
-		// Get the other parameters from the request
-		let _amount = req.amount;
-		let _push = req.push_amout;
-		let _id = req.channel_id;
-
-        // TODO: Open the channel
+		let chanid = hex::encode(cln_resp.channel_id);
+		let mut bcln = self.blast_cln.lock().await;
+		bcln.open_channels.insert(id, ClnChannel { source: node_id.to_string(), dest_pk: peer.to_string(), chan_id: chanid });
 
 		// Respond to the open channel request
 		let chan_response = BlastOpenChannelResponse { success: true };
@@ -299,26 +373,50 @@ impl BlastRpc for BlastClnServer {
 	/// Blast requests that a node controlled by this model closes a channel
 	async fn close_channel(&self, request: Request<BlastCloseChannelRequest>) -> Result<Response<BlastCloseChannelResponse>, Status> {
 		let req = &request.get_ref();
+		let node_id = &req.node;
+		let id = &req.channel_id;
+		let mut node = self.get_node(node_id.to_string()).await?;
+		let mut bcln = self.blast_cln.lock().await;
+		let chanid = match bcln.open_channels.get(id) {
+			Some(i) => &i.chan_id,
+			None => {
+				return Err(Status::new(Code::InvalidArgument, format!("Could not get channel from id: {:?}", id)));
+			}
+		};
 
-		// Get the source node from the id
-		let _node_id = &req.node;
-
-		// Get the channel from the model's open channel map
-		let _id = req.channel_id;
-
-        // TODO: Close the channel
-
-		// Respond to the close channel request
-		let chan_response = BlastCloseChannelResponse { success: true };
-		let response = Response::new(chan_response);
-		Ok(response)
+		match node.close(CloseRequest{
+			id: chanid.to_string(),
+			unilateraltimeout: None,
+			destination: None,
+			fee_negotiation_step: None,
+			wrong_funding: None,
+			force_lease_closed: None,
+			feerange: Vec::new(),
+		}).await {
+			Ok(_) => {
+				bcln.open_channels.remove(id);
+				// Respond to the close channel request
+				let chan_response = BlastCloseChannelResponse { success: true };
+				let response = Response::new(chan_response);
+				Ok(response)
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		}
 	}
 
 	/// Create a comma separated list of open channels that this model has control over
 	async fn get_model_channels(&self, _request: Request<BlastGetModelChannelsRequest>) -> Result<Response<BlastGetModelChannelsResponse>, Status> {
-        // TODO: Get the channels
+		let mut result = String::new();
+		let bcln = self.blast_cln.lock().await;
+		for (key, value) in &bcln.open_channels {
+			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.dest_pk));
+		}
 
-		let chan_response = BlastGetModelChannelsResponse { channels: String::from("") };
+		result.pop();
+
+		let chan_response = BlastGetModelChannelsResponse { channels: result };
 		let response = Response::new(chan_response);
 		Ok(response)
 	}
@@ -327,68 +425,83 @@ impl BlastRpc for BlastClnServer {
 	async fn connect_peer(&self, request: Request<BlastConnectRequest>) -> Result<Response<BlastConnectResponse>, Status> {
 		let req = &request.get_ref();
 
-		// Get the peer public key from the request and convert it to a PublicKey object
-		let _peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
-			Ok(k) => k,
+		let peer_pub = &req.peer_pub_key;
+		let fulladdr = req.peer_addr.clone();
+		let parts: Vec<&str> = fulladdr.split(':').collect();
+		let addr = parts[0];
+		let port = match parts[1].parse::<u32>() {
+			Ok(number) => number,
 			Err(_) => {
-				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
+				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer port: {:?}", parts[1])));
 			}
 		};
 
-		// Get the peer address from the request and convert it to a SocketAddress object
-		let addr = req.peer_addr.clone();
-		let _converted_addr = addr.replace("localhost", "127.0.0.1");
-
 		// Attempt to connect to the peer from this node
-		let _node_id = &req.node;
+		let node_id = &request.get_ref().node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-        // TODO: Connect to the peer
-
-        let connect_response = BlastConnectResponse { success: true };
-        let response = Response::new(connect_response);
-        Ok(response)
+		match node.connect_peer(ConnectRequest{id: String::from(peer_pub), host: Some(String::from(addr)), port: Some(port)}).await {
+			Ok(_) => {
+				let connect_response = BlastConnectResponse { success: true };
+				let response = Response::new(connect_response);
+				Ok(response)
+			},
+			Err(s) => {
+				Err(s)
+			}
+		}
 	}
 
 	/// Blast requests that a node controlled by this model disconnects from a peer
 	async fn disconnect_peer(&self, request: Request<BlastDisconnectRequest>) -> Result<Response<BlastDisconnectResponse>, Status> {
 		let req = &request.get_ref();
+		let node_id = &request.get_ref().node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-		// Get the peer public key from the request and convert it to a PublicKey object
-		let _peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
-			Ok(k) => k,
-			Err(_) => {
-				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
+		match node.disconnect(DisconnectRequest{id: hex::decode(&req.peer_pub_key).unwrap(), force: None}).await {
+			Ok(_) => {
+				let connect_response = BlastDisconnectResponse { success: true };
+				let response = Response::new(connect_response);
+				Ok(response)
+			},
+			Err(s) => {
+				Err(s)
 			}
-		};
-
-		// Attempt to disconnect from the peer
-		let _node_id = &req.node;
-
-        // TODO: Disconnect from the peer
-
-        let connect_response = BlastDisconnectResponse { success: true };
-        let response = Response::new(connect_response);
-        Ok(response)
+		}
 	}
 
 	/// Get a BTC address for a node
 	async fn get_btc_address(&self, request: Request<BlastBtcAddressRequest>) -> Result<Response<BlastBtcAddressResponse>, Status> {
-		let _node_id = &request.get_ref().node;
+		let node_id = &request.get_ref().node;
+		let mut node = self.get_node(node_id.to_string()).await?;
 
-        // TODO: Get the BTC address
+		let cln_resp = match node.new_addr(NewaddrRequest{addresstype: Some(3)}).await {
+			Ok(r) => {
+				r.into_inner()
+			},
+			Err(s) => {
+				return Err(s);
+			}
+		};
 
-		let addr_response = BlastBtcAddressResponse { address: String::from("") };
+		let addr_response = BlastBtcAddressResponse { address: cln_resp.p2tr.unwrap() };
 		let response = Response::new(addr_response);
 		Ok(response)
 	}
 
 	/// Get the listen address for a node
 	async fn get_listen_address(&self, request: Request<BlastListenAddressRequest>) -> Result<Response<BlastListenAddressResponse>, Status> {
-		let _node_id = &request.get_ref().node;
+		let node_id = &request.get_ref().node;
+		let bcln = self.blast_cln.lock().await;
 
-        // TODO: Get the listen address
-
-		let listen_response = BlastListenAddressResponse { address: String::from("") };
+		let addr = match bcln.addresses.get(node_id) {
+			Some(a) => a,
+			None => {
+				return Err(Status::new(Code::InvalidArgument, format!("No addresses")));
+			}
+		};
+		
+		let listen_response = BlastListenAddressResponse { address: addr.clone() };
 		let response = Response::new(listen_response);
 		Ok(response)
 	}
