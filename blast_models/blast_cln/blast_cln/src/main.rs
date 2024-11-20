@@ -9,6 +9,8 @@ use std::process::Command;
 use std::net::TcpListener;
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
+use std::io::BufReader;
 
 // Extra dependencies
 use tonic::{transport::Server, Request, Response, Status};
@@ -25,6 +27,11 @@ use log::LevelFilter;
 use serde::Serialize;
 use serde::Deserialize;
 use amount_or_all::Value;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use tar::Builder;
+use flate2::read::GzDecoder;
+use tar::Archive;
 use cln::*;
 pub mod cln {
     tonic::include_proto!("cln");
@@ -37,6 +44,12 @@ use blast_proto::*;
 pub mod blast_proto {
     tonic::include_proto!("blast_proto");
 }
+
+// The name of this model (should match the name in model.json)
+pub const MODEL_NAME: &str = "blast_cln";
+
+// The directory to save simulations
+pub const SIM_DIR: &str = ".blast/blast_sims";
 
 // The temporary directory to save runtime cln data
 pub const DATA_DIR: &str = ".blast/blast_data/blast_cln";
@@ -58,6 +71,7 @@ struct SimJsonFile {
 }
 
 // The data that the CLN model will store about an open channel
+#[derive(Serialize, Deserialize, Debug)]
 struct ClnChannel {
 	source: String,
 	dest_pk: String,
@@ -540,9 +554,84 @@ impl BlastRpc for BlastClnServer {
 	/// Load a previous state of this model
 	async fn load(&self, request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
 		let req = &request.get_ref();
-		let _sim_name = &req.sim;
+		let sim_name = &req.sim;
+		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let sim_dir = String::from(SIM_DIR);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
-        // TODO: Load the sim
+		// Set paths for the archive and JSON file
+		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+
+		// Open the .tar.gz file
+		let tar_gz = File::open(archive_path)?;
+		let decompressor = GzDecoder::new(tar_gz);
+		let mut archive = Archive::new(decompressor);
+		// Extract the archive into the specified directory
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		let data_path = Path::new(&data_dir);
+		fs::create_dir_all(data_path).unwrap();
+		archive.unpack(data_path).unwrap();
+
+
+		// Count the number of nodes to start and remove the old symlink
+		let mut count = 0;
+        for entry in fs::read_dir(data_path).unwrap() {
+            let entry = match entry {
+				Ok(e) => e,
+				Err(_) => {
+					return Err(Status::new(Code::Unknown, "Could not read the data directory"));
+				}
+			};
+            let path = entry.path();
+
+            // Check if the entry is a directory and if its name starts with blast_ldk-
+            if path.is_dir() {
+                if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if dir_name.starts_with("blast_cln-") {
+                        count += 1;
+
+                        // Construct the path to the file to remove
+                        let log = path.join("log");
+                        if log.exists() {
+                            match fs::remove_file(&log) {
+								Ok(_) => {},
+								Err(_) => {}
+							}
+                        }
+
+                        // Construct the path to the file to remove
+                        let pid = path.join("lightningd-regtest.pid");
+                        if pid.exists() {
+                            match fs::remove_file(&pid) {
+								Ok(_) => {},
+								Err(_) => {}
+							}
+                        }
+                    }
+                }
+            }
+        }
+		
+		// Attempt to start the nodes
+		let request = BlastStartRequest { num_nodes: count };
+		let start_req = Request::new(request);
+		match self.start_nodes(start_req).await {
+			Ok(_) => {},
+			Err(_) => {
+				return Err(Status::new(Code::Unknown, "Could not start nodes."));
+			}
+		}
+
+		// Open the JSON file
+		let file = File::open(json_path).unwrap();
+		let reader = BufReader::new(file);
+
+		// Deserialize JSON to Channel map
+		let chans: HashMap<i64, ClnChannel> = serde_json::from_reader(reader).unwrap();
+		let mut bcln = self.blast_cln.lock().await;
+		bcln.open_channels = chans;
 
 		let load_response = BlastLoadResponse { success: true };
 		let response = Response::new(load_response);
@@ -552,9 +641,30 @@ impl BlastRpc for BlastClnServer {
 	/// Save this models current state
 	async fn save(&self, request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
 		let req = &request.get_ref();
-		let _sim_name = &req.sim;
+		let sim_name = &req.sim;
+		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let sim_dir = String::from(SIM_DIR);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
-        // TODO: Save the sim
+		// Set paths for the archive and JSON file
+		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+
+		// Create the .tar.gz archive
+		let home = env::var("HOME").expect("HOME environment variable not set");
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		if let Some(parent) = archive_path.parent() {
+			fs::create_dir_all(parent).unwrap();
+		}
+		let tar_gz = File::create(&archive_path).unwrap();
+		let enc = GzEncoder::new(tar_gz, Compression::default());
+		let mut tar = Builder::new(enc);
+		tar.append_dir_all(".", data_dir).unwrap();
+
+		// Serialize the HashMap to JSON and write to a file
+		let bcln = self.blast_cln.lock().await;
+		let json_string = serde_json::to_string_pretty(&bcln.open_channels).unwrap();
+		fs::write(&json_path, json_string)?;
 
 		let save_response = BlastSaveResponse { success: true };
 		let response = Response::new(save_response);

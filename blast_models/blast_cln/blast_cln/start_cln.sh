@@ -5,6 +5,7 @@ socketrpc=$2
 LIGHTNING_DIR=$3
 BITCOIN_DIR="$HOME/.bitcoin"
 CLND="$HOME/.blast/clightning/lightningd/lightningd"
+CLND_SOCK="$HOME/.blast/clightning/sockets"
 mkdir -p "$LIGHTNING_DIR"
 cat <<- EOF > "$LIGHTNING_DIR/config"
 network=regtest
@@ -29,5 +30,6 @@ lease-fee-basis=50
 invoices-onchain-fallback
 EOF
 
+mkdir -p "$CLND_SOCK"
 test -f "$LIGHTNING_DIR/lightningd-regtest.pid" || \
-    "$CLND" "--network=regtest" "--lightning-dir=$LIGHTNING_DIR" "--bitcoin-datadir=$BITCOIN_DIR" "--database-upgrade=true" "--grpc-port=$socketrpc"&
+    "$CLND" "--network=regtest" "--lightning-dir=$LIGHTNING_DIR" "--bitcoin-datadir=$BITCOIN_DIR" "--database-upgrade=true" "--grpc-port=$socketrpc" "--rpc-file="$CLND_SOCK"/"$socketrpc""&
