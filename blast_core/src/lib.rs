@@ -539,12 +539,18 @@ impl Blast {
     }
 
     /// Send funds to a node on-chain and optionally mines blocks to confirm that payment
-    pub async fn fund_node(&mut self, node_id: String, confirm: bool) -> Result<String, String> {
+    pub async fn fund_node(&mut self, node_id: String, amt_btc: f64, confirm: bool) -> Result<String, String> {
         match self.blast_model_manager.get_btc_address(node_id).await {
             Ok(a) => {
                 let address = bitcoincore_rpc::bitcoin::Address::from_str(&a).map_err(|e|e.to_string())?
                 .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
-                let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, bitcoincore_rpc::bitcoin::Amount::ONE_BTC, None, None, None, None, None, None)
+                let amt = match bitcoincore_rpc::bitcoin::Amount::from_btc(amt_btc) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return Err(format!("Error getting funding amount: {}", e));
+                    }
+                };
+                let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, amt, None, None, None, None, None, None)
                 .map_err(|e| e.to_string())?;
 
                 if confirm {

@@ -58,6 +58,9 @@ pub const SIM_DIR: &str = ".blast/blast_sims";
 // The temporary directory to save runtime ldk data
 pub const DATA_DIR: &str = ".blast/blast_data/blast_ldk";
 
+// The address to connect to this model
+pub const RPC_ADDR: &str = "127.0.0.1:5051";
+
 // The data that is stored in the sim-ln sim.json file
 #[derive(Serialize, Deserialize, Debug)]
 struct SimLnNode {
@@ -143,7 +146,7 @@ struct BlastLdkServer {
 
 // Helper functions for the RPC server
 impl BlastLdkServer {
-	// Get an ldk-node "Node" object from an id
+	/// Get an ldk-node "Node" object from an id
 	async fn get_node(&self, id: String) -> Result<Arc<Node>, Status> {
 		let bldk = self.blast_ldk.lock().await;
 		let node = match bldk.nodes.get(&id) {
@@ -156,12 +159,31 @@ impl BlastLdkServer {
 		Ok(node.clone())
 	}
 
-	// Get an available port that can be used for listening
-	fn get_available_port(&self) -> Option<u16> {
-		(8000..9000).find(|port| self.port_is_available(*port))
+	/// Get the HOME environment variable
+	fn get_home(&self) -> Result<String, Status> {
+		match env::var("HOME") {
+			Ok(h) => {
+				Ok(h)
+			},
+			Err(_) => {
+				Err(Status::new(Code::NotFound, "HOME environment variable is not set."))
+			}
+		}
 	}
 
-	// Check if a port is available
+	/// Get an available port that can be used for listening
+	fn get_available_port(&self, start: u16, end: u16) -> Result<u16, Status> {
+		match (start..end).find(|port| self.port_is_available(*port)) {
+			Some(p) => {
+				Ok(p)
+			},
+			None => {
+				Err(Status::new(Code::NotFound, "Could not find an available port."))
+			}
+		}
+	}
+
+	/// Check if a port is available
 	fn port_is_available(&self, port: u16) -> bool {
 		match TcpListener::bind(("127.0.0.1", port)) {
 			Ok(_) => true,
@@ -177,7 +199,7 @@ impl BlastRpc for BlastLdkServer {
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
 		let num_nodes = request.get_ref().num_nodes;
 		let mut node_list = SimJsonFile{nodes: Vec::new()};
-		let home = env::var("HOME").expect("HOME environment variable not set");
+		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 
 		// Start the requested number of ldk nodes
@@ -192,7 +214,7 @@ impl BlastRpc for BlastLdkServer {
 
 			// Set up the listening address for this node
 			let mut listen_addr_list: Vec<SocketAddress> = Vec::new();
-			let port = self.get_available_port().unwrap();
+			let port = self.get_available_port(8000, 9000)?;
 			let addr = format!("127.0.0.1:{}", port);
 			let address = match SocketAddress::from_str(&addr) {
 				Ok(a) => a,
@@ -340,8 +362,13 @@ impl BlastRpc for BlastLdkServer {
 		let node_id = &req.node;
 		let node = self.get_node(node_id.to_string()).await?;
 
+		let peer = match hex::decode(&req.peer_pub_key) {
+			Ok(p) => { p }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
+		};
+
 		// Get the peer public key from the request and convert it to a PublicKey object
-		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
@@ -435,8 +462,13 @@ impl BlastRpc for BlastLdkServer {
 	async fn connect_peer(&self, request: Request<BlastConnectRequest>) -> Result<Response<BlastConnectResponse>, Status> {
 		let req = &request.get_ref();
 
+		let peer = match hex::decode(&req.peer_pub_key) {
+			Ok(p) => { p }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
+		};
+
 		// Get the peer public key from the request and convert it to a PublicKey object
-		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
@@ -474,8 +506,13 @@ impl BlastRpc for BlastLdkServer {
 	async fn disconnect_peer(&self, request: Request<BlastDisconnectRequest>) -> Result<Response<BlastDisconnectResponse>, Status> {
 		let req = &request.get_ref();
 
+		let peer = match hex::decode(&req.peer_pub_key) {
+			Ok(p) => { p }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
+		};
+
 		// Get the peer public key from the request and convert it to a PublicKey object
-		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
@@ -528,7 +565,14 @@ impl BlastRpc for BlastLdkServer {
 			}
 		};
 
-		let listen_response = BlastListenAddressResponse { address: addr.clone().get(0).unwrap().clone().to_string() };
+		let a = match addr.get(0) {
+			Some(a) => a,
+			None => {
+				return Err(Status::new(Code::Unknown, "Could not get listening address."));
+			}
+		};
+
+		let listen_response = BlastListenAddressResponse { address: a.clone().to_string() };
 		let response = Response::new(listen_response);
 		Ok(response)
 	}
@@ -537,11 +581,14 @@ impl BlastRpc for BlastLdkServer {
 	async fn stop_model(&self, _request: Request<BlastStopModelRequest>) -> Result<Response<BlastStopModelResponse>, Status> {
 		let mut bldk = self.blast_ldk.lock().await;
 		for (_, node) in &bldk.nodes {
-			node.stop().unwrap();
+			match node.stop() {
+				Ok(_) => {},
+				Err(_) => {},
+			}
 		}
 		let _ = bldk.shutdown_sender.take().unwrap().send(());
 
-		let home = env::var("HOME").expect("HOME environment variable not set");
+		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let _ = fs::remove_dir_all(data_dir);
 
@@ -554,7 +601,7 @@ impl BlastRpc for BlastLdkServer {
 	async fn load(&self, request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
-		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let home_dir = self.get_home()?;
 		let sim_dir = String::from(SIM_DIR);
 		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
@@ -567,7 +614,7 @@ impl BlastRpc for BlastLdkServer {
 		let decompressor = GzDecoder::new(tar_gz);
 		let mut archive = Archive::new(decompressor);
 		// Extract the archive into the specified directory
-		let home = env::var("HOME").expect("HOME environment variable not set");
+		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let data_path = Path::new(&data_dir);
 		fs::create_dir_all(data_path).unwrap();
@@ -634,7 +681,7 @@ impl BlastRpc for BlastLdkServer {
 	async fn save(&self, request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
-		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let home_dir = self.get_home()?;
 		let sim_dir = String::from(SIM_DIR);
 		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
@@ -643,7 +690,7 @@ impl BlastRpc for BlastLdkServer {
 		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
 
 		// Create the .tar.gz archive
-		let home = env::var("HOME").expect("HOME environment variable not set");
+		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		if let Some(parent) = archive_path.parent() {
 			fs::create_dir_all(parent).unwrap();
@@ -682,7 +729,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	.unwrap());
 
 	// Create the BlastLdkServer object
-    let addr = "127.0.0.1:5051".parse()?;
+    let addr = RPC_ADDR.parse()?;
 	let (shutdown_sender, shutdown_receiver) = oneshot::channel::<()>();
 	let mut bldk = BlastLdk::new();
 	bldk.shutdown_sender = Some(shutdown_sender);
