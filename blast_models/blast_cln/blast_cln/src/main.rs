@@ -81,12 +81,18 @@ struct ClnChannel {
 	chan_id: String
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct BlastClnData {
+	simln_data: SimJsonFile,
+	addresses: HashMap<String, String>,
+	ports: HashMap<String, (String, String)>,
+	open_channels: HashMap<i64, ClnChannel>,
+}
+
 // The main data structure for the CLN model
 struct BlastCln {
 	nodes: HashMap<String, NodeClient<Channel>>,
-	simln_data: String,
-	addresses: HashMap<String, String>,
-	open_channels: HashMap<i64, ClnChannel>,
+	cln_data: BlastClnData,
     shutdown_sender: Option<oneshot::Sender<()>>
 }
 
@@ -95,9 +101,7 @@ impl BlastCln {
     fn new() -> Self {
         Self {
 			nodes: HashMap::new(),
-			simln_data: String::from(""),
-			addresses: HashMap::new(),
-			open_channels: HashMap::new(),
+			cln_data: BlastClnData{ simln_data: SimJsonFile{nodes: Vec::new()}, addresses: HashMap::new(), ports: HashMap::new(), open_channels: HashMap::new()},
             shutdown_sender: None
         }
     }
@@ -154,6 +158,101 @@ impl BlastClnServer {
 			Err(_) => false,
 		}
 	}
+
+	async fn load_nodes(&self) -> Result<Response<BlastLoadResponse>,Status> {
+		let mut bcln = self.blast_cln.lock().await;
+		let mut nodes: HashMap<String, NodeClient<Channel>> = HashMap::new();
+
+		// Start the requested number of cln nodes
+		for n in &bcln.cln_data.simln_data.nodes {
+			// Create a node id, get available ports and set the cert paths
+			let node_id = n.id.clone();
+			let port = &bcln.cln_data.ports.get(&node_id).unwrap().0.clone();
+			let rpcport = &bcln.cln_data.ports.get(&node_id).unwrap().1.clone();
+	
+			// Create a new client from the connected channel
+			let (_,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
+			nodes.insert(node_id.clone(), c);
+		}
+
+		bcln.nodes = nodes;
+
+		// Return the response to start_nodes
+		let start_response = BlastLoadResponse { success: true };
+		let response = Response::new(start_response);
+		Ok(response)
+	}
+
+	async fn start_node(&self, node_id: String, port: String, rpcport: String) -> Result<(SimLnNode,NodeClient<Channel>),Status> {
+		let home = self.get_home()?;
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+
+		let cln_dir = format!("{}/{}", data_dir, node_id);
+		let addr = format!("{}:{}", "https://localhost", rpcport.to_string());
+		let ca_path = format!("{}{}", cln_dir, "/regtest/ca.pem");
+		let client_path = format!("{}{}", cln_dir, "/regtest/client.pem");
+		let client_key_path = format!("{}{}", cln_dir, "/regtest/client-key.pem");
+
+		// Start a node
+		let mut command = Command::new("bash");
+		let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
+		script_file.push_str("/start_cln.sh");
+		command.arg(&script_file);
+		command.arg(&port);
+		command.arg(&rpcport);
+		command.arg(&cln_dir);
+		command.arg(&node_id);
+		match command.spawn() {
+			Ok(_) => {},
+			Err(_e) => return Err(Status::new(Code::InvalidArgument, "Could not start cln.")),
+		};
+
+		// Let the node get started up
+		thread::sleep(Duration::from_secs(2));
+
+		// Load the certificates
+		let ca_cert = match fs::read(ca_path.clone()) {
+			Ok(c) => { c }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not read the ca path.")),
+		};
+		let ca_certificate = Certificate::from_pem(ca_cert);
+		let client_cert = match fs::read(client_path.clone()) {
+			Ok(c) => { c }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not read the client path.")),
+		};
+		let client_key_cert = match fs::read(client_key_path.clone()) {
+			Ok(c) => { c }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not read the client key.")),
+		};
+		let id = tonic::transport::Identity::from_pem(client_cert, client_key_cert);
+
+		// Configure TLS settings with the CA certificate
+		let tls_config = ClientTlsConfig::new()
+			.domain_name("localhost")
+			.identity(id)
+			.ca_certificate(ca_certificate);
+
+		// Create the URI from the generated address
+		let uri: Uri = match addr.parse() {
+			Ok(u) => { u }
+			Err(_) => return Err(Status::new(Code::Unknown, "Invalid uri.")),
+		};
+
+		// Connect to the gRPC server using SSL/TLS
+		let channel = match Channel::builder(uri)
+			.tls_config(tls_config).unwrap()
+			.connect()
+			.await {
+				Ok(c) => { c }
+				Err(_) => return Err(Status::new(Code::Unknown, "Could not connect to server.")),
+			};
+
+		// Add the node to the model's list of nodes and to the SimLn data list
+		let n = SimLnNode{id: node_id.clone(), address: addr.clone(), ca_cert: ca_path, client_cert: client_path, client_key: client_key_path};
+
+		// Create a new client from the connected channel
+		Ok((n, NodeClient::new(channel)))
+	}
 }
 
 // The RPC server that the blast framework will connect to
@@ -162,9 +261,7 @@ impl BlastRpc for BlastClnServer {
 	/// Start a certain number of nodes
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
 		let num_nodes = request.get_ref().num_nodes;
-		let mut node_list = SimJsonFile{nodes: Vec::new()};
-		let home = self.get_home()?;
-		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		let mut bcln = self.blast_cln.lock().await;
 
 		// Start the requested number of cln nodes
 		for i in 0..num_nodes {
@@ -172,87 +269,14 @@ impl BlastRpc for BlastClnServer {
 			let node_id = format!("{}{:04}", "blast_cln-", i);
 			let port = self.get_available_port(8000, 9000)?;
 			let rpcport = self.get_available_port(port+1, 9000)?.to_string();
-			let cln_dir = format!("{}/{}", data_dir, node_id);
-			let addr = format!("{}:{}", "https://localhost", rpcport.to_string());
-			let ca_path = format!("{}{}", cln_dir, "/regtest/ca.pem");
-			let client_path = format!("{}{}", cln_dir, "/regtest/client.pem");
-			let client_key_path = format!("{}{}", cln_dir, "/regtest/client-key.pem");
-
-			// Start a node
-			let mut command = Command::new("bash");
-			let mut script_file = env!("CARGO_MANIFEST_DIR").to_owned();
-			script_file.push_str("/start_cln.sh");
-			command.arg(&script_file);
-			command.arg(&port.to_string());
-			command.arg(&rpcport);
-			command.arg(&cln_dir);
-			command.arg(&node_id);
-			match command.spawn() {
-				Ok(_) => {},
-				Err(_e) => return Err(Status::new(Code::InvalidArgument, "Could not start cln.")),
-			};
-
-			// Let the node get started up
-			thread::sleep(Duration::from_secs(2));
-
-			// Load the certificates
-			let ca_cert = match fs::read(ca_path.clone()) {
-				Ok(c) => { c }
-				Err(_) => return Err(Status::new(Code::Unknown, "Could not read the ca path.")),
-			};
-			let ca_certificate = Certificate::from_pem(ca_cert);
-			let client_cert = match fs::read(client_path.clone()) {
-				Ok(c) => { c }
-				Err(_) => return Err(Status::new(Code::Unknown, "Could not read the client path.")),
-			};
-			let client_key_cert = match fs::read(client_key_path.clone()) {
-				Ok(c) => { c }
-				Err(_) => return Err(Status::new(Code::Unknown, "Could not read the client key.")),
-			};
-			let id = tonic::transport::Identity::from_pem(client_cert, client_key_cert);
-	
-			// Configure TLS settings with the CA certificate
-			let tls_config = ClientTlsConfig::new()
-				.domain_name("localhost")
-				.identity(id)
-				.ca_certificate(ca_certificate);
-
-			// Create the URI from the generated address
-			let uri: Uri = match addr.parse() {
-				Ok(u) => { u }
-				Err(_) => return Err(Status::new(Code::Unknown, "Invalid uri.")),
-			};
-	
-			// Connect to the gRPC server using SSL/TLS
-			let channel = match Channel::builder(uri)
-				.tls_config(tls_config).unwrap()
-				.connect()
-				.await {
-					Ok(c) => { c }
-					Err(_) => return Err(Status::new(Code::Unknown, "Could not connect to server.")),
-				};
 	
 			// Create a new client from the connected channel
-			let client = NodeClient::new(channel);
-
-			// Add the node to the model's list of nodes and to the SimLn data list
-			let mut bcln = self.blast_cln.lock().await;
-			bcln.nodes.insert(node_id.clone(), client);
-			let n = SimLnNode{id: node_id.clone(), address: addr.clone(), ca_cert: ca_path, client_cert: client_path, client_key: client_key_path};
-			node_list.nodes.push(n);
-			bcln.addresses.insert(node_id.clone(), format!("localhost:{}", &port.to_string()));
+			let (n,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
+			bcln.nodes.insert(node_id.clone(), c);
+			bcln.cln_data.simln_data.nodes.push(n);
+			bcln.cln_data.addresses.insert(node_id.clone(), format!("localhost:{}", &port.to_string()));
+			bcln.cln_data.ports.insert(node_id.clone(), (port.to_string().clone(), rpcport.clone()));
 		}
-
-		// Serialize the SimLn data into a json string
-		let mut bcln = self.blast_cln.lock().await;
-		bcln.simln_data = match serde_json::to_string(&node_list) {
-			Ok(s) => s,
-			Err(_) => {
-				let start_response = BlastStartResponse { success: false };
-				let response = Response::new(start_response);
-				return Ok(response);
-			}
-		};
 
 		// Return the response to start_nodes
 		let start_response = BlastStartResponse { success: true };
@@ -262,8 +286,18 @@ impl BlastRpc for BlastClnServer {
 
 	/// Get the sim-ln data for this model
 	async fn get_sim_ln(&self, _request: Request<BlastSimlnRequest>) -> Result<Response<BlastSimlnResponse>, Status> {
+		// Serialize the SimLn data into a json string
 		let bcln = self.blast_cln.lock().await;
-		let simln_response = BlastSimlnResponse { simln_data: bcln.simln_data.clone().into() };
+		let data = match serde_json::to_string(&bcln.cln_data.simln_data) {
+			Ok(s) => s,
+			Err(_) => {
+				let simln_response = BlastSimlnResponse { simln_data: String::from("").into() };
+				let response = Response::new(simln_response);
+				return Ok(response);
+			}
+		};
+
+		let simln_response = BlastSimlnResponse { simln_data: data.clone().into() };
 		let response = Response::new(simln_response);
 		Ok(response)
 	}
@@ -415,7 +449,7 @@ impl BlastRpc for BlastClnServer {
 
 		let chanid = hex::encode(cln_resp.channel_id);
 		let mut bcln = self.blast_cln.lock().await;
-		bcln.open_channels.insert(id, ClnChannel { source: node_id.to_string(), dest_pk: peer.to_string(), chan_id: chanid });
+		bcln.cln_data.open_channels.insert(id, ClnChannel { source: node_id.to_string(), dest_pk: peer.to_string(), chan_id: chanid });
 
 		// Respond to the open channel request
 		let chan_response = BlastOpenChannelResponse { success: true };
@@ -430,7 +464,7 @@ impl BlastRpc for BlastClnServer {
 		let id = &req.channel_id;
 		let mut node = self.get_node(node_id.to_string()).await?;
 		let mut bcln = self.blast_cln.lock().await;
-		let chanid = match bcln.open_channels.get(id) {
+		let chanid = match bcln.cln_data.open_channels.get(id) {
 			Some(i) => &i.chan_id,
 			None => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not get channel from id: {:?}", id)));
@@ -447,7 +481,7 @@ impl BlastRpc for BlastClnServer {
 			feerange: Vec::new(),
 		}).await {
 			Ok(_) => {
-				bcln.open_channels.remove(id);
+				bcln.cln_data.open_channels.remove(id);
 				// Respond to the close channel request
 				let chan_response = BlastCloseChannelResponse { success: true };
 				let response = Response::new(chan_response);
@@ -463,7 +497,7 @@ impl BlastRpc for BlastClnServer {
 	async fn get_model_channels(&self, _request: Request<BlastGetModelChannelsRequest>) -> Result<Response<BlastGetModelChannelsResponse>, Status> {
 		let mut result = String::new();
 		let bcln = self.blast_cln.lock().await;
-		for (key, value) in &bcln.open_channels {
+		for (key, value) in &bcln.cln_data.open_channels {
 			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.dest_pk));
 		}
 
@@ -555,7 +589,7 @@ impl BlastRpc for BlastClnServer {
 		let node_id = &request.get_ref().node;
 		let bcln = self.blast_cln.lock().await;
 
-		let addr = match bcln.addresses.get(node_id) {
+		let addr = match bcln.cln_data.addresses.get(node_id) {
 			Some(a) => a,
 			None => {
 				return Err(Status::new(Code::InvalidArgument, format!("No addresses")));
@@ -608,7 +642,7 @@ impl BlastRpc for BlastClnServer {
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
-		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Open the .tar.gz file
 		let tar_gz = File::open(archive_path)?;
@@ -621,8 +655,16 @@ impl BlastRpc for BlastClnServer {
 		fs::create_dir_all(data_path).unwrap();
 		archive.unpack(data_path).unwrap();
 
+		// Open the JSON file
+		let file = File::open(json_path).unwrap();
+		let reader = BufReader::new(file);
+
+		// Deserialize JSON to Channel map
+		let data: BlastClnData = serde_json::from_reader(reader).unwrap();
+		let mut bcln = self.blast_cln.lock().await;
+		bcln.cln_data = data;
+
 		// Count the number of nodes to start and remove the old symlink
-		let mut count = 0;
         for entry in fs::read_dir(data_path).unwrap() {
             let entry = match entry {
 				Ok(e) => e,
@@ -636,8 +678,6 @@ impl BlastRpc for BlastClnServer {
             if path.is_dir() {
                 if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
                     if dir_name.starts_with("blast_cln-") {
-                        count += 1;
-
                         // Construct the path to the file to remove
                         let log = path.join("log");
                         if log.exists() {
@@ -661,27 +701,7 @@ impl BlastRpc for BlastClnServer {
         }
 		
 		// Attempt to start the nodes
-		let request = BlastStartRequest { num_nodes: count };
-		let start_req = Request::new(request);
-		match self.start_nodes(start_req).await {
-			Ok(_) => {},
-			Err(_) => {
-				return Err(Status::new(Code::Unknown, "Could not start nodes."));
-			}
-		}
-
-		// Open the JSON file
-		let file = File::open(json_path).unwrap();
-		let reader = BufReader::new(file);
-
-		// Deserialize JSON to Channel map
-		let chans: HashMap<i64, ClnChannel> = serde_json::from_reader(reader).unwrap();
-		let mut bcln = self.blast_cln.lock().await;
-		bcln.open_channels = chans;
-
-		let load_response = BlastLoadResponse { success: true };
-		let response = Response::new(load_response);
-		Ok(response)
+		Ok(self.load_nodes().await?)
 	}
 
 	/// Save this models current state
@@ -694,7 +714,7 @@ impl BlastRpc for BlastClnServer {
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
-		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Create the .tar.gz archive
 		let home = self.get_home()?;
@@ -707,9 +727,9 @@ impl BlastRpc for BlastClnServer {
 		let mut tar = Builder::new(enc);
 		tar.append_dir_all(".", data_dir).unwrap();
 
-		// Serialize the HashMap to JSON and write to a file
+		// Serialize the data to JSON and write to a file
 		let bcln = self.blast_cln.lock().await;
-		let json_string = serde_json::to_string_pretty(&bcln.open_channels).unwrap();
+		let json_string = serde_json::to_string_pretty(&bcln.cln_data).unwrap();
 		fs::write(&json_path, json_string)?;
 
 		let save_response = BlastSaveResponse { success: true };
