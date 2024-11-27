@@ -159,22 +159,23 @@ impl BlastClnServer {
 		}
 	}
 
-	async fn load_nodes(&self) -> Result<Response<BlastLoadResponse>,Status> {
+	async fn load_nodes(&self, data: BlastClnData) -> Result<Response<BlastLoadResponse>,Status> {
 		let mut bcln = self.blast_cln.lock().await;
 		let mut nodes: HashMap<String, NodeClient<Channel>> = HashMap::new();
 
 		// Start the requested number of cln nodes
-		for n in &bcln.cln_data.simln_data.nodes {
+		for n in &data.simln_data.nodes {
 			// Create a node id, get available ports and set the cert paths
 			let node_id = n.id.clone();
-			let port = &bcln.cln_data.ports.get(&node_id).unwrap().0.clone();
-			let rpcport = &bcln.cln_data.ports.get(&node_id).unwrap().1.clone();
+			let port = &data.ports.get(&node_id).unwrap().0.clone();
+			let rpcport = &data.ports.get(&node_id).unwrap().1.clone();
 	
 			// Create a new client from the connected channel
 			let (_,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
 			nodes.insert(node_id.clone(), c);
 		}
 
+		bcln.cln_data = data;
 		bcln.nodes = nodes;
 
 		// Return the response to start_nodes
@@ -607,8 +608,8 @@ impl BlastRpc for BlastClnServer {
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 
         let mut bcln = self.blast_cln.lock().await;
-		for (id, node) in &bcln.nodes {
-			match node.clone().stop(StopRequest{}).await {
+		for (id, node) in &mut bcln.nodes {
+			match node.stop(StopRequest{}).await {
 				Ok(_) => {},
 				Err(_) => {
 					let mut command = Command::new("bash");
@@ -618,7 +619,7 @@ impl BlastRpc for BlastClnServer {
 					command.arg(format!("{}/{}", data_dir, id));
 					match command.output() {
 						Ok(_) => {},
-						Err(_e) => return Err(Status::new(Code::InvalidArgument, "Could not stop cln.")),
+						Err(_) => return Err(Status::new(Code::InvalidArgument, "Could not stop cln.")),
 					};
 				}
 			}
@@ -655,15 +656,6 @@ impl BlastRpc for BlastClnServer {
 		fs::create_dir_all(data_path).unwrap();
 		archive.unpack(data_path).unwrap();
 
-		// Open the JSON file
-		let file = File::open(json_path).unwrap();
-		let reader = BufReader::new(file);
-
-		// Deserialize JSON to Channel map
-		let data: BlastClnData = serde_json::from_reader(reader).unwrap();
-		let mut bcln = self.blast_cln.lock().await;
-		bcln.cln_data = data;
-
 		// Count the number of nodes to start and remove the old symlink
         for entry in fs::read_dir(data_path).unwrap() {
             let entry = match entry {
@@ -699,9 +691,13 @@ impl BlastRpc for BlastClnServer {
                 }
             }
         }
-		
+
+		let file = File::open(json_path).unwrap();
+		let reader = BufReader::new(file);
+		let data: BlastClnData = serde_json::from_reader(reader).unwrap();
+
 		// Attempt to start the nodes
-		Ok(self.load_nodes().await?)
+		Ok(self.load_nodes(data).await?)
 	}
 
 	/// Save this models current state
