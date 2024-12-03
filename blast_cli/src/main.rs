@@ -13,7 +13,6 @@ use simplelog::WriteLogger;
 use simplelog::Config;
 use log::LevelFilter;
 use tokio::task::JoinSet;
-use anyhow::Error as AnyError;
 
 // TUI libraries
 use ratatui::{
@@ -88,7 +87,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
     let mut error: Option<String> = None;
     let running = Arc::new(AtomicBool::new(true));
     let mut running_models: Vec<Child> = Vec::new();
-    let mut sim_tasks: Option<JoinSet<Result<(), AnyError>>> = None;
+    let mut sim_tasks: Option<JoinSet<()>> = None;
 
     loop {
         // Draw the frame

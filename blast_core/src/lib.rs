@@ -17,7 +17,6 @@ use std::env;
 // Extra dependencies
 use bitcoincore_rpc::Auth;
 use bitcoincore_rpc::RpcApi;
-use anyhow::Error;
 use bitcoincore_rpc::Client;
 use tokio::task::JoinSet;
 use tokio::sync::mpsc;
@@ -171,7 +170,7 @@ impl Blast {
     }
 
     /// Start the simulation -- this will start the simulation events and the simln transaction generation
-    pub async fn start_simulation(&mut self) -> Result<JoinSet<Result<(),Error>>, String> {
+    pub async fn start_simulation(&mut self) -> Result<JoinSet<()>, String> {
         let net = match &self.network {
             Some(n) => n,
             None => return Err(format!("No network found")),
@@ -190,17 +189,32 @@ impl Blast {
 
         // Start the simln thread
         sim_tasks.spawn(async move {
-            simln_man.start().await
+            match simln_man.start().await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error running simln: {:?}", e);
+                }
+            };
         });
 
         // Start the event thread
         sim_tasks.spawn(async move {
-            event_man.start(sender).await
+            match event_man.start(sender).await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error running event thread: {:?}", e);
+                }
+            };
         });
 
         // Start the model manager thread
         sim_tasks.spawn(async move {
-            model_man.process_events(receiver).await
+            match model_man.process_events(receiver).await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error running model thread: {:?}", e);
+                }
+            };
         });
 
         Ok(sim_tasks)

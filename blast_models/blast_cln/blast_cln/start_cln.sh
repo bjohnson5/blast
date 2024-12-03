@@ -3,6 +3,7 @@
 socket=$1
 socketrpc=$2
 LIGHTNING_DIR=$3
+ALIAS=$4
 BITCOIN_DIR="$HOME/.bitcoin"
 CLND="$HOME/.blast/clightning/lightningd/lightningd"
 CLND_SOCK="$HOME/.blast/clightning/sockets"
@@ -32,4 +33,4 @@ EOF
 
 mkdir -p "$CLND_SOCK"
 test -f "$LIGHTNING_DIR/lightningd-regtest.pid" || \
-    "$CLND" "--network=regtest" "--lightning-dir=$LIGHTNING_DIR" "--bitcoin-datadir=$BITCOIN_DIR" "--database-upgrade=true" "--grpc-port=$socketrpc" "--rpc-file="$CLND_SOCK"/"$socketrpc""&
+    "$CLND" "--network=regtest" "--alias=$ALIAS" "--lightning-dir=$LIGHTNING_DIR" "--bitcoin-datadir=$BITCOIN_DIR" "--database-upgrade=true" "--grpc-port=$socketrpc" "--rpc-file="$CLND_SOCK"/"$socketrpc""&
