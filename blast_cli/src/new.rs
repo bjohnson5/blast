@@ -32,10 +32,10 @@ impl BlastTab for NewTab {
         let msg = vec![
             "Press ".into(),
             "q".bold(),
-            " to exit, ".into(),
-            "Enter".bold(),
+            " to quit, ".into(),
+            "enter".bold(),
             " to start network, ".into(),
-            "Esc".bold(),
+            "esc".bold(),
             " to change tabs".into()
         ];
         let text = Text::from(Line::from(msg)).patch_style(Style::default());
