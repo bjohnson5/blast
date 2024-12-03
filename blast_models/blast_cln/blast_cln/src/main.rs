@@ -605,7 +605,8 @@ impl BlastRpc for BlastClnServer {
 	/// Shutdown the nodes
 	async fn stop_model(&self, _request: Request<BlastStopModelRequest>) -> Result<Response<BlastStopModelResponse>, Status> {
 		let home = self.get_home()?;
-		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		let data_dir = PathBuf::from(home.clone()).join(DATA_DIR).display().to_string();
+		let socket_dir = PathBuf::from(home).join(".blast/clightning/sockets").display().to_string();
 
         let mut bcln = self.blast_cln.lock().await;
 		for (id, node) in &mut bcln.nodes {
@@ -627,6 +628,7 @@ impl BlastRpc for BlastClnServer {
 
         let _ = bcln.shutdown_sender.take().unwrap().send(());
 		let _ = fs::remove_dir_all(data_dir);
+		let _ = fs::remove_dir_all(socket_dir);
 
 		let stop_response = BlastStopModelResponse { success: true };
 		let response = Response::new(stop_response);
