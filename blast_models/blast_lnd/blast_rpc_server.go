@@ -262,7 +262,7 @@ func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastConne
 	}
 
 	if client, ok := s.blast_lnd.clients[request.Node]; ok {
-		req := &lnrpc.ConnectPeerRequest{Addr: &lnrpc.LightningAddress{Pubkey: request.PeerPubKey, Host: request.PeerAddr}, Perm: false, Timeout: 5}
+		req := &lnrpc.ConnectPeerRequest{Addr: &lnrpc.LightningAddress{Pubkey: request.PeerPubKey, Host: request.PeerAddr}, Perm: true, Timeout: 5}
 		ctx := context.Background()
 		_, err := client.ConnectPeer(ctx, req)
 		if err != nil {

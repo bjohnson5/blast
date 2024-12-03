@@ -491,14 +491,14 @@ func get_ports(used []int) ([]int, string, string) {
 		listen, _ = freeport.GetFreePort()
 	}
 	listen_port := strconv.Itoa(listen)
+	used = append(used, listen)
 
 	rpc, _ := freeport.GetFreePort()
 	for slices.Contains(used, rpc) {
 		rpc, _ = freeport.GetFreePort()
 	}
 	rpc_port := strconv.Itoa(rpc)
-
-	used = append(used, listen, rpc)
+	used = append(used, rpc)
 
 	return used, listen_port, rpc_port
 }
