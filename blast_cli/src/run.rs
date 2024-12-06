@@ -50,7 +50,7 @@ impl BlastTab for RunTab {
             [Constraint::Percentage(5), Constraint::Percentage(10), Constraint::Percentage(85)],
         )
         .split(area);
-    
+
         let msg = vec![
             "Press ".into(),
             "s".bold(),
@@ -61,26 +61,26 @@ impl BlastTab for RunTab {
         let text = Text::from(Line::from(msg)).patch_style(Style::default());
         let help_message = Paragraph::new(text);
         frame.render_widget(help_message, layout[0]);
-    
+
         let line_gauge = LineGauge::default()
             .block(Block::new().title("Simulation Progress:"))
             .filled_style(Style::default().fg(Color::LightBlue))
             .line_set(symbols::line::THICK)
             .ratio(self.progress);
         frame.render_widget(line_gauge, layout[1]);
-    
+
         let layout2 = Layout::new(
             Direction::Horizontal,
             [Constraint::Percentage(50), Constraint::Percentage(50)],
         )
         .split(layout[2]);
-    
+
         let layout3 = Layout::new(
             Direction::Vertical,
             [Constraint::Percentage(33), Constraint::Percentage(50), Constraint::Percentage(33)],
         )
         .split(layout2[0]);
-    
+
         let e: Vec<ListItem> = self.events.items.clone().iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
         let etasks = List::new(e)
@@ -88,7 +88,7 @@ impl BlastTab for RunTab {
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
         frame.render_stateful_widget(etasks, layout3[0], &mut self.events.state);
-    
+
         let a: Vec<ListItem> = self.activity.items.clone().iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
         let atasks = List::new(a)
@@ -96,7 +96,7 @@ impl BlastTab for RunTab {
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
         frame.render_stateful_widget(atasks,  layout3[1], &mut self.activity.state);
-    
+
         let s: Vec<ListItem> = self.stats.items.clone().iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
         let stasks = List::new(s)
@@ -104,7 +104,7 @@ impl BlastTab for RunTab {
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
         frame.render_stateful_widget(stasks, layout3[2], &mut self.stats.state);
-    
+
         let x_labels = vec![
             Span::styled(
                 format!("{}", self.window[0]),
@@ -259,7 +259,7 @@ impl BlastTab for RunTab {
             for i in 0..20 {
                 self.success_rate_data[i] = self.success_rate_data[i + 1];
             }
-    
+
             self.success_rate_data[20] = (frame as f64, succes_rate);
         }
     }

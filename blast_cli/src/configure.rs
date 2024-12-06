@@ -101,18 +101,18 @@ impl BlastTab for ConfigureTab {
             [Constraint::Percentage(5), Constraint::Percentage(95)],
         )
         .split(area);
-    
+
         let layout1 = Layout::new(
             Direction::Horizontal,
             [Constraint::Percentage(50), Constraint::Percentage(50)],
         )
         .split(l[1]);
-    
+
         let layout = Layout::new(
             Direction::Vertical,
             [Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Percentage(33)],
         ).split(layout1[1]);
-    
+
         let e: Vec<ListItem> = self.events.items.clone().iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
         let etasks = List::new(e)
@@ -120,7 +120,7 @@ impl BlastTab for ConfigureTab {
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
         frame.render_stateful_widget(etasks, layout[0], &mut self.events.state);
-    
+
         let c: Vec<ListItem> = self.channels.items.clone().iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
         let ctasks = List::new(c)
@@ -128,7 +128,7 @@ impl BlastTab for ConfigureTab {
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
         frame.render_stateful_widget(ctasks, layout[1], &mut self.channels.state);
-    
+
         let a: Vec<ListItem> = self.activity.items.clone().iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))])).collect();
         let atasks = List::new(a)
@@ -136,13 +136,13 @@ impl BlastTab for ConfigureTab {
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
         frame.render_stateful_widget(atasks, layout[2], &mut self.activity.state);
-    
+
         let vertical = Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(1),
         ]);
         let [input_area, messages_area] = vertical.areas(layout1[0]);
-    
+
         let msg = vec![
             "Use ".into(),
             "stop".bold(),
@@ -157,7 +157,7 @@ impl BlastTab for ConfigureTab {
         let text = Text::from(Line::from(msg)).patch_style(Style::default());
         let help_message = Paragraph::new(text);
         frame.render_widget(help_message, l[0]);
-    
+
         let input = Paragraph::new(self.input.as_str())
             .style(match self.current_section {
                 ConfigureSection::Command => Style::default().fg(Color::LightYellow),
@@ -165,7 +165,7 @@ impl BlastTab for ConfigureTab {
             })
             .block(Block::bordered().title("Command"));
         frame.render_widget(input, input_area);
-    
+
         match self.current_section {
             ConfigureSection::Command => {
                 #[allow(clippy::cast_possible_truncation)]

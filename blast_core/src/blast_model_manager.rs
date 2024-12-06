@@ -122,7 +122,7 @@ impl BlastModelManager {
                 return Err(format!("Failed to get the current directory: {:?}", e));
             }
         };
-    
+
         // Get the full path to the model executable
         current_dir.push("../blast_models/".to_owned()+&model.config.name+"/"+&model.config.start);
         let model_exe = current_dir.to_string_lossy().into_owned();
@@ -211,7 +211,7 @@ impl BlastModelManager {
         let request = tonic::Request::new(BlastLoadRequest {
             sim: sim_name
         });
-    
+
         // Execute the load RPC
         let response = match client.load(request).await {
             Ok(r) => r,
@@ -225,7 +225,7 @@ impl BlastModelManager {
             Ok(())
         } else {
             Err(String::from("Model did not load successfully"))
-        }       
+        }
     }
 
     /// Tell a model to save its current state
@@ -237,7 +237,7 @@ impl BlastModelManager {
         let request = tonic::Request::new(BlastSaveRequest {
             sim: sim_name
         });
-    
+
         // Execute the save RPC
         let response = match client.save(request).await {
             Ok(r) => r,
@@ -251,7 +251,7 @@ impl BlastModelManager {
             Ok(())
         } else {
             Err(String::from("Model did not save successfully"))
-        }        
+        }
     }
 
     /// Get a list of the currently available models
@@ -261,7 +261,7 @@ impl BlastModelManager {
             Err(String::from("No models available"))
         } else {
             Ok(keys)
-        }       
+        }
     }
 
     /// Start a given number of nodes for the given model name
@@ -273,7 +273,7 @@ impl BlastModelManager {
         let request = tonic::Request::new(BlastStartRequest {
             num_nodes: num_nodes,
         });
-    
+
         // Execute the start RPC
         let response = match client.start_nodes(request).await {
             Ok(r) => r,
@@ -369,7 +369,7 @@ impl BlastModelManager {
                 return Err(format!("RPC wallet_balance failed: {:?}", e));
             }
         };
-        
+
         Ok(response.get_ref().balance.clone())
     }
 
@@ -393,7 +393,7 @@ impl BlastModelManager {
                 return Err(format!("RPC channel_balance failed: {:?}", e));
             }
         };
-        
+
         Ok(response.get_ref().balance.clone())
     }
 
@@ -417,7 +417,7 @@ impl BlastModelManager {
                 return Err(format!("RPC list_channels failed: {:?}", e));
             }
         };
-        
+
         Ok(response.get_ref().channels.clone())
     }
 
@@ -480,7 +480,7 @@ impl BlastModelManager {
                 return Err(format!("RPC open_channel failed: {:?}", e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -489,7 +489,7 @@ impl BlastModelManager {
         }
     }
 
-    /// Close a channel with chan_id from a node with source_id 
+    /// Close a channel with chan_id from a node with source_id
     pub async fn close_channel(&mut self, source_id: String, chan_id: i64) -> Result<(), String> {
         // Get the model name from the node_id (example node_id: model_name-0000)
         let model_name: String = get_model_from_node(source_id.clone());
@@ -510,7 +510,7 @@ impl BlastModelManager {
                 return Err(format!("RPC close_channel failed: {:?}", e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -544,7 +544,7 @@ impl BlastModelManager {
                 return Err(format!("RPC connect_peer failed: {:?}", e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -576,7 +576,7 @@ impl BlastModelManager {
                 return Err(format!("RPC disconnect_peer failed: {:?}", e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -605,7 +605,7 @@ impl BlastModelManager {
                 return Err(format!("RPC get_btc_address failed: {:?}", e));
             }
         };
-        
+
         Ok(response.get_ref().address.clone())
     }
 
@@ -629,7 +629,7 @@ impl BlastModelManager {
                 return Err(format!("RPC get_listen_address failed: {:?}", e));
             }
         };
-        
+
         Ok(response.get_ref().address.clone())
     }
 
@@ -655,7 +655,7 @@ impl BlastModelManager {
 fn get_model_from_node(node_id: String) -> String {
     // Split the input string on the '-' character
     let parts: Vec<&str> = node_id.split('-').collect();
-    
+
     // Return the first part, or an empty string if the input was empty
     parts.get(0).unwrap_or(&"").to_string()
 }

@@ -124,10 +124,12 @@ func main() {
 	shutdown_channel := make(chan struct{})
 	dir, err := os.UserHomeDir()
 	if err != nil {
-		blast_lnd_log("Could not get home directory.")
+		BlastLndLog("Could not get home directory.")
 		return
 	}
 	blast_data_dir := dir + "/" + DATA_DIR
+
+	BlastLndLog("Starting blast_lnd model")
 
 	// Create the main blast_lnd struct and start the RPC server so that blast can connect to this model
 	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, home_dir: dir, data_dir: blast_data_dir, open_channels: make(map[string]ChannelPoint), wg: &wg}
@@ -139,18 +141,18 @@ func main() {
 		defer wg.Done()
 		// Wait for shutdown signal
 		<-shutdown_channel
-		blast_lnd_log("Received shutdown signal")
+		BlastLndLog("Received shutdown signal")
 		server.GracefulStop()
 		os.RemoveAll(blast_lnd.data_dir)
 	}()
 
-	blast_lnd_log("Model started")
+	BlastLndLog("Model started")
 	wg.Wait()
 }
 
 // Start a given number of nodes
 func (blnd *BlastLnd) start_nodes(num_nodes int) error {
-	blast_lnd_log("Starting nodes")
+	BlastLndLog("Starting nodes")
 
 	// Create a shutdown interceptor, blast_lnd nodes will shutdown on ctrl-c
 	shutdownInterceptor, err := create_shutdown_listener()
@@ -178,7 +180,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 		// Write the lnd.conf file to the lnd data dir
 		err := write_config(node_id, blnd.data_dir, lnddir, listen_port, rpc_port, alias)
 		if err != nil {
-			blast_lnd_log("Error writing lnd config to file: " + err.Error())
+			BlastLndLog("Error writing lnd config to file: " + err.Error())
 			return err
 		}
 
@@ -202,7 +204,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 		blnd.rpc_addresses[alias] = "https://" + "127.0.0.1:" + rpc_port
 
 		// Start the node
-		blast_lnd_log("Starting node: " + alias)
+		BlastLndLog("Starting node: " + alias)
 		blnd.wg.Add(1)
 		go start_lnd(loadedConfig, implCfg, shutdownInterceptor, blnd.wg)
 
@@ -219,7 +221,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 	// After successfully connecting to all nodes, create the sim-ln data for all the running nodes
 	err = blnd.create_sim_ln_data(node_list, blnd.data_dir+"/sim.json")
 	if err != nil {
-		blast_lnd_log("Error creating simln data" + err.Error())
+		BlastLndLog("Error creating simln data" + err.Error())
 		return err
 	}
 
@@ -228,7 +230,7 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 
 // Load previously saved nodes
 func (blnd *BlastLnd) load_nodes(path string) error {
-	blast_lnd_log("Loading nodes")
+	BlastLndLog("Loading nodes")
 
 	// Create a shutdown interceptor, blast_lnd nodes will shutdown on ctrl-c
 	shutdownInterceptor, err := create_shutdown_listener()
@@ -305,7 +307,7 @@ func (blnd *BlastLnd) load_nodes(path string) error {
 
 	// Start the nodes
 	for i, n := range loaded_nodes {
-		blast_lnd_log("Starting node: " + n.alias)
+		BlastLndLog("Starting node: " + n.alias)
 
 		free_port(n.listen_port)
 		free_port(n.rpc_port)
@@ -340,7 +342,7 @@ func (blnd *BlastLnd) connect_to_nodes(nodes []SimLnNode) {
 		var tlsCreds credentials.TransportCredentials
 		tlsCreds, err := credentials.NewClientTLSFromFile(n.Cert, "")
 		if err != nil {
-			blast_lnd_log("Error reading TLS cert" + err.Error())
+			BlastLndLog("Error reading TLS cert" + err.Error())
 			continue
 		}
 
@@ -352,7 +354,7 @@ func (blnd *BlastLnd) connect_to_nodes(nodes []SimLnNode) {
 		// Connect to the server
 		client, err := grpc.Dial(n.Address, opts...)
 		if err != nil {
-			blast_lnd_log("Error connecting to node: " + n.Id)
+			BlastLndLog("Error connecting to node: " + n.Id)
 			continue
 		}
 
@@ -445,7 +447,7 @@ func load_lnd_config(shutdownInterceptor signal.Interceptor, lnddir string) (*ln
 	loadedConfig, err := lnd.LoadConfig(shutdownInterceptor)
 	if err != nil {
 		if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
-			blast_lnd_log("Error loading config.")
+			BlastLndLog("Error loading config.")
 		}
 		return nil, nil, err
 	}
@@ -458,7 +460,7 @@ func load_lnd_config(shutdownInterceptor signal.Interceptor, lnddir string) (*ln
 func create_shutdown_listener() (signal.Interceptor, error) {
 	shutdownInterceptor, err := signal.Intercept()
 	if err != nil {
-		blast_lnd_log("Could not set up shutdown interceptor.")
+		BlastLndLog("Could not set up shutdown interceptor.")
 		return signal.Interceptor{}, err
 	}
 
@@ -504,7 +506,7 @@ func get_ports(used []int) ([]int, string, string) {
 }
 
 // Log a message
-func blast_lnd_log(message string) {
+func BlastLndLog(message string) {
 	log.Println("[BLAST MODEL:" + MODEL_NAME + "] " + message)
 }
 
@@ -558,7 +560,6 @@ func ensure_directory_exists(filePath string) error {
 // found to the tar writer; the purpose for accepting multiple writers is to allow
 // for multiple outputs (for example a file, or md5 hash)
 func Tar(src string, writers ...io.Writer) error {
-	// ensure the src actually exists before trying to tar it
 	if _, err := os.Stat(src); err != nil {
 		return fmt.Errorf("unable to tar files - %v", err.Error())
 	}
@@ -571,46 +572,35 @@ func Tar(src string, writers ...io.Writer) error {
 	tw := tar.NewWriter(gzw)
 	defer tw.Close()
 
-	// walk path
 	return filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
-
-		// return on any error
 		if err != nil {
 			return err
 		}
 
-		// return on non-regular files (thanks to [kumo](https://medium.com/@komuw/just-like-you-did-fbdd7df829d3) for this suggested update)
 		if !fi.Mode().IsRegular() {
 			return nil
 		}
 
-		// create a new dir/file header
 		header, err := tar.FileInfoHeader(fi, fi.Name())
 		if err != nil {
 			return err
 		}
 
-		// update the name to correctly reflect the desired destination when untaring
 		header.Name = strings.TrimPrefix(strings.Replace(file, src, "", -1), string(filepath.Separator))
 
-		// write the header
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
 
-		// open files for taring
 		f, err := os.Open(file)
 		if err != nil {
 			return err
 		}
 
-		// copy file data into tar writer
 		if _, err := io.Copy(tw, f); err != nil {
 			return err
 		}
 
-		// manually close here after each file operation; defering would cause each file close
-		// to wait until all operations have completed.
 		f.Close()
 
 		return nil
@@ -620,7 +610,6 @@ func Tar(src string, writers ...io.Writer) error {
 // Untar takes a destination path and a reader; a tar reader loops over the tarfile
 // creating the file structure at 'dst' along the way, and writing any files
 func Untar(dst string, r io.Reader) error {
-
 	gzr, err := gzip.NewReader(r)
 	if err != nil {
 		return err
@@ -633,39 +622,23 @@ func Untar(dst string, r io.Reader) error {
 		header, err := tr.Next()
 
 		switch {
-
-		// if no more files are found return
 		case err == io.EOF:
 			return nil
-
-		// return any other error
 		case err != nil:
 			return err
-
-		// if the header is nil, just skip it (not sure how this happens)
 		case header == nil:
 			continue
 		}
 
-		// the target location where the dir/file should be created
 		target := filepath.Join(dst, header.Name)
 
-		// the following switch could also be done using fi.Mode(), not sure if there
-		// a benefit of using one vs. the other.
-		// fi := header.FileInfo()
-
-		// check the file type
 		switch header.Typeflag {
-
-		// if its a dir and it doesn't exist create it
 		case tar.TypeDir:
 			if _, err := os.Stat(target); err != nil {
 				if err := os.MkdirAll(target, 0755); err != nil {
 					return err
 				}
 			}
-
-		// if it's a file create it
 		case tar.TypeReg:
 			ensure_directory_exists(target)
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
@@ -673,13 +646,10 @@ func Untar(dst string, r io.Reader) error {
 				return err
 			}
 
-			// copy over contents
 			if _, err := io.Copy(f, tr); err != nil {
 				return err
 			}
 
-			// manually close here after each file operation; defering would cause each file close
-			// to wait until all operations have completed.
 			f.Close()
 		}
 	}
@@ -687,21 +657,23 @@ func Untar(dst string, r io.Reader) error {
 
 // Start the blast RPC server so that the blast framework can connect to this model
 func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
+	BlastLndLog("Starting GRPC server")
+
 	server := grpc.NewServer()
 	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd})
 
 	listener, err := net.Listen("tcp", RPC_ADDR)
 	if err != nil {
-		blast_lnd_log("Failed to listen: " + err.Error())
+		BlastLndLog("Failed to listen: " + err.Error())
 		return nil
 	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		blast_lnd_log("Server started at " + RPC_ADDR)
+		BlastLndLog("Server started at " + RPC_ADDR)
 		if err := server.Serve(listener); err != nil {
-			blast_lnd_log("Failed to serve: " + err.Error())
+			BlastLndLog("Failed to serve: " + err.Error())
 		}
 	}()
 
@@ -711,8 +683,7 @@ func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 // Start an lnd node
 func start_lnd(cfg *lnd.Config, implCfg *lnd.ImplementationCfg, interceptor signal.Interceptor, wg *sync.WaitGroup) {
 	defer wg.Done()
-
 	if err := lnd.Main(cfg, lnd.ListenerCfg{}, implCfg, interceptor); err != nil {
-		blast_lnd_log("Could not start lnd: " + err.Error())
+		BlastLndLog("Could not start lnd: " + err.Error())
 	}
 }
