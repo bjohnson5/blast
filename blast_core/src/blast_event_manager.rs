@@ -195,7 +195,7 @@ impl BlastEventManager {
                         Ok(n) => n,
                         Err(e) => return Err(format!("Error parsing argument: {}", e))
                     };
-    
+
                     let blast_event = BlastEvent::CloseChannelEvent(arg0, arg1);
                     self.push_event(frame_num, blast_event);
                     Ok(())
@@ -208,7 +208,7 @@ impl BlastEventManager {
                         Ok(n) => n,
                         Err(e) => return Err(format!("Error parsing argument: {}", e))
                     };
-    
+
                     let blast_event = BlastEvent::OnChainTransaction(arg0, arg1, arg2);
                     self.push_event(frame_num, blast_event);
                     Ok(())

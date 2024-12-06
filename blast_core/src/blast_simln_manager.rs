@@ -253,7 +253,7 @@ impl BlastSimLnManager {
                 Ok(())
             },
             None => return Err(anyhow!("Simln not setup. Call set_simln before starting the simulation")),
-        }        
+        }
     }
 
     /// Stop SimLn simulation

@@ -129,6 +129,8 @@ func main() {
 	}
 	blast_data_dir := dir + "/" + DATA_DIR
 
+	blast_lnd_log("Starting blast_lnd model")
+
 	// Create the main blast_lnd struct and start the RPC server so that blast can connect to this model
 	blast_lnd := BlastLnd{clients: make(map[string]lnrpc.LightningClient), listen_addresses: make(map[string]string), rpc_addresses: make(map[string]string), shutdown_ch: shutdown_channel, home_dir: dir, data_dir: blast_data_dir, open_channels: make(map[string]ChannelPoint), wg: &wg}
 	server := start_grpc_server(&wg, &blast_lnd)
@@ -558,7 +560,6 @@ func ensure_directory_exists(filePath string) error {
 // found to the tar writer; the purpose for accepting multiple writers is to allow
 // for multiple outputs (for example a file, or md5 hash)
 func Tar(src string, writers ...io.Writer) error {
-	// ensure the src actually exists before trying to tar it
 	if _, err := os.Stat(src); err != nil {
 		return fmt.Errorf("unable to tar files - %v", err.Error())
 	}
@@ -571,46 +572,35 @@ func Tar(src string, writers ...io.Writer) error {
 	tw := tar.NewWriter(gzw)
 	defer tw.Close()
 
-	// walk path
 	return filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
-
-		// return on any error
 		if err != nil {
 			return err
 		}
 
-		// return on non-regular files (thanks to [kumo](https://medium.com/@komuw/just-like-you-did-fbdd7df829d3) for this suggested update)
 		if !fi.Mode().IsRegular() {
 			return nil
 		}
 
-		// create a new dir/file header
 		header, err := tar.FileInfoHeader(fi, fi.Name())
 		if err != nil {
 			return err
 		}
 
-		// update the name to correctly reflect the desired destination when untaring
 		header.Name = strings.TrimPrefix(strings.Replace(file, src, "", -1), string(filepath.Separator))
 
-		// write the header
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
 
-		// open files for taring
 		f, err := os.Open(file)
 		if err != nil {
 			return err
 		}
 
-		// copy file data into tar writer
 		if _, err := io.Copy(tw, f); err != nil {
 			return err
 		}
 
-		// manually close here after each file operation; defering would cause each file close
-		// to wait until all operations have completed.
 		f.Close()
 
 		return nil
@@ -620,7 +610,6 @@ func Tar(src string, writers ...io.Writer) error {
 // Untar takes a destination path and a reader; a tar reader loops over the tarfile
 // creating the file structure at 'dst' along the way, and writing any files
 func Untar(dst string, r io.Reader) error {
-
 	gzr, err := gzip.NewReader(r)
 	if err != nil {
 		return err
@@ -633,39 +622,23 @@ func Untar(dst string, r io.Reader) error {
 		header, err := tr.Next()
 
 		switch {
-
-		// if no more files are found return
 		case err == io.EOF:
 			return nil
-
-		// return any other error
 		case err != nil:
 			return err
-
-		// if the header is nil, just skip it (not sure how this happens)
 		case header == nil:
 			continue
 		}
 
-		// the target location where the dir/file should be created
 		target := filepath.Join(dst, header.Name)
 
-		// the following switch could also be done using fi.Mode(), not sure if there
-		// a benefit of using one vs. the other.
-		// fi := header.FileInfo()
-
-		// check the file type
 		switch header.Typeflag {
-
-		// if its a dir and it doesn't exist create it
 		case tar.TypeDir:
 			if _, err := os.Stat(target); err != nil {
 				if err := os.MkdirAll(target, 0755); err != nil {
 					return err
 				}
 			}
-
-		// if it's a file create it
 		case tar.TypeReg:
 			ensure_directory_exists(target)
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
@@ -673,13 +646,10 @@ func Untar(dst string, r io.Reader) error {
 				return err
 			}
 
-			// copy over contents
 			if _, err := io.Copy(f, tr); err != nil {
 				return err
 			}
 
-			// manually close here after each file operation; defering would cause each file close
-			// to wait until all operations have completed.
 			f.Close()
 		}
 	}
@@ -687,6 +657,8 @@ func Untar(dst string, r io.Reader) error {
 
 // Start the blast RPC server so that the blast framework can connect to this model
 func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
+	blast_lnd_log("Starting GRPC server")
+
 	server := grpc.NewServer()
 	pb.RegisterBlastRpcServer(server, &BlastRpcServer{blast_lnd: blnd})
 
@@ -711,7 +683,6 @@ func start_grpc_server(wg *sync.WaitGroup, blnd *BlastLnd) *grpc.Server {
 // Start an lnd node
 func start_lnd(cfg *lnd.Config, implCfg *lnd.ImplementationCfg, interceptor signal.Interceptor, wg *sync.WaitGroup) {
 	defer wg.Done()
-
 	if err := lnd.Main(cfg, lnd.ListenerCfg{}, implCfg, interceptor); err != nil {
 		blast_lnd_log("Could not start lnd: " + err.Error())
 	}

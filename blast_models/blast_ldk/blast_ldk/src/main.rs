@@ -118,6 +118,7 @@ impl<'de> Deserialize<'de> for Channel {
     }
 }
 
+// The LDK data that will be saved to disk when a simulation is saved
 #[derive(Serialize, Deserialize)]
 struct BlastLdkData {
 	simln_data: SimJsonFile,
@@ -196,17 +197,18 @@ impl BlastLdkServer {
 		}
 	}
 
+	/// Load the saved nodes using the saved data
 	async fn load_nodes(&self, data: BlastLdkData) -> Result<Response<BlastLoadResponse>,Status> {
 		let mut bldk = self.blast_ldk.lock().await;
 		let mut nodes: HashMap<String, Arc<Node>> = HashMap::new();
 
-		// Start the requested number of cln nodes
+		// Start the requested number of ldk nodes
 		for n in &data.simln_data.nodes {
 			// Create a node id, get available ports and set the cert paths
 			let node_id = n.id.clone();
 			let port = &data.ports.get(&node_id).unwrap().0.clone();
 			let rpcport = &data.ports.get(&node_id).unwrap().1.clone();
-	
+
 			// Create a new client from the connected channel
 			let (_,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
 			nodes.insert(node_id.clone(), c);
@@ -221,6 +223,7 @@ impl BlastLdkServer {
 		Ok(response)
 	}
 
+	/// Start a node with a given id and ports
 	async fn start_node(&self, node_id: String, port: String, rpcport: String) -> Result<(SimLnNode,Arc<Node>),Status> {
 		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
@@ -291,7 +294,10 @@ impl BlastLdkServer {
 impl BlastRpc for BlastLdkServer {
 	/// Start a certain number of nodes
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
+		log::info!("BlastLdkServer: RPC start_nodes");
+
 		let num_nodes = request.get_ref().num_nodes;
+		let mut bldk = self.blast_ldk.lock().await;
 
 		// Start the requested number of ldk nodes
 		for i in 0..num_nodes {
@@ -303,7 +309,6 @@ impl BlastRpc for BlastLdkServer {
 			let (n,node) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
 
 			// Add the node to the model's list of nodes and to the SimLn data list
-			let mut bldk = self.blast_ldk.lock().await;
 			bldk.nodes.insert(node_id.clone(), node.clone());
 			bldk.ldk_data.simln_data.nodes.push(n);
 			bldk.ldk_data.ports.insert(node_id.clone(), (port.to_string().clone(), rpcport.clone()));
@@ -317,6 +322,8 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Get the sim-ln data for this model
 	async fn get_sim_ln(&self, _request: Request<BlastSimlnRequest>) -> Result<Response<BlastSimlnResponse>, Status> {
+		log::info!("BlastLdkServer: RPC get_sim_ln");
+
 		// Serialize the SimLn data into a json string
 		let bldk = self.blast_ldk.lock().await;
 		let data = match serde_json::to_string(&bldk.ldk_data.simln_data) {
@@ -335,9 +342,10 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests the pub key of a node that is controlled by this model
 	async fn get_pub_key(&self, request: Request<BlastPubKeyRequest>,) -> Result<Response<BlastPubKeyResponse>, Status> {
+		log::info!("BlastLdkServer: RPC get_pub_key");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-
 		let pub_key = node.node_id().to_string();
 
 		let key_response = BlastPubKeyResponse { pub_key: pub_key };
@@ -347,10 +355,16 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests the list of peers for a node that is controlled by this model
 	async fn list_peers(&self, request: Request<BlastPeersRequest>,) -> Result<Response<BlastPeersResponse>, Status> {
+		log::info!("BlastLdkServer: RPC list_peers");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
+		let peers_resp = node.list_peers();
 
-		let peers = format!("{:?}", node.list_peers());
+		log::info!("Peers: {:?}", peers_resp);
+
+		// TODO: format in a consistent way
+		let peers = format!("{:?}", peers_resp);
 
 		let peers_response = BlastPeersResponse { peers: peers };
 		let response = Response::new(peers_response);
@@ -359,34 +373,52 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests the wallet balance of a node that is controlled by this model
 	async fn wallet_balance(&self, request: Request<BlastWalletBalanceRequest>) -> Result<Response<BlastWalletBalanceResponse>, Status> {
+		log::info!("BlastLdkServer: RPC wallet_balance");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-
 		let balance = node.list_balances().total_onchain_balance_sats;
 
-		let balance_response = BlastWalletBalanceResponse { balance: balance.to_string() };
+		log::info!("Wallet balance: {:?}", balance.to_string());
+
+		// TODO: format in a consistent way
+		let b = balance.to_string();
+
+		let balance_response = BlastWalletBalanceResponse { balance: b };
 		let response = Response::new(balance_response);
 		Ok(response)
 	}
 
 	/// Blast requests the channel balance of a node that is controlled by this model
 	async fn channel_balance(&self, request: Request<BlastChannelBalanceRequest>) -> Result<Response<BlastChannelBalanceResponse>, Status> {
+		log::info!("BlastLdkServer: RPC channel_balance");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-
 		let balance = node.list_balances().total_lightning_balance_sats;
 
-		let balance_response = BlastChannelBalanceResponse { balance: balance.to_string() };
+		log::info!("Channel balance: {:?}", balance.to_string());
+
+		// TODO: format in a consistent way
+		let b = balance.to_string();
+
+		let balance_response = BlastChannelBalanceResponse { balance: b };
 		let response = Response::new(balance_response);
 		Ok(response)
 	}
 
 	/// Blast requests the list of channels for a node that is controlled by this model
 	async fn list_channels(&self, request: Request<BlastListChannelsRequest>) -> Result<Response<BlastListChannelsResponse>, Status> {
+		log::info!("BlastLdkServer: RPC list_channels");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
+		let c = node.list_channels();
 
-		let chans = format!("{:?}", node.list_channels());
+		log::info!("Channels: {:?}", c);
+
+		// TODO: format in a consistent way
+		let chans = format!("{:?}", c);
 
 		let chan_response = BlastListChannelsResponse { channels: chans };
 		let response = Response::new(chan_response);
@@ -395,18 +427,19 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests that a node controlled by this model opens a channel
 	async fn open_channel(&self, request: Request<BlastOpenChannelRequest>) -> Result<Response<BlastOpenChannelResponse>, Status> {
-		let req = &request.get_ref();
+		log::info!("BlastLdkServer: RPC open_channel");
 
 		// Get the source node from the id
+		let req = &request.get_ref();
 		let node_id = &req.node;
 		let node = self.get_node(node_id.to_string()).await?;
 
+		// Get the peer public key from the request and convert it to a PublicKey object
 		let peer = match hex::decode(&req.peer_pub_key) {
 			Ok(p) => { p }
 			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
 		};
 
-		// Get the peer public key from the request and convert it to a PublicKey object
 		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
@@ -430,6 +463,7 @@ impl BlastRpc for BlastLdkServer {
 		let id = req.channel_id;
 
 		// Attempt to open a channel from this node
+		log::info!("Opening channel from {} to {} for the amount: {}", node_id, peer_pub, amount);
 		let chan_id = match node.open_announced_channel(peer_pub, peer_addr, amount as u64, Some(push as u64), None) {
 			Ok(id) => id,
 			Err(_) => {
@@ -438,6 +472,7 @@ impl BlastRpc for BlastLdkServer {
 		};
 
 		// Add the channel to the model's list of open channels
+		log::info!("Channel opened, saving details");
 		let mut bldk = self.blast_ldk.lock().await;
 		bldk.ldk_data.open_channels.insert(id, Channel{source: node_id.to_string(), id: chan_id, pk: peer_pub});
 
@@ -449,9 +484,10 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests that a node controlled by this model closes a channel
 	async fn close_channel(&self, request: Request<BlastCloseChannelRequest>) -> Result<Response<BlastCloseChannelResponse>, Status> {
-		let req = &request.get_ref();
+		log::info!("BlastLdkServer: RPC close_channel");
 
 		// Get the source node from the id
+		let req = &request.get_ref();
 		let node_id = &req.node;
 		let node = self.get_node(node_id.to_string()).await?;
 
@@ -466,20 +502,20 @@ impl BlastRpc for BlastLdkServer {
 		};
 
 		// Attempt to close the channel
+		log::info!("Closing channel: {}", id);
 		match node.close_channel(&channel.id, channel.pk) {
-			Ok(_) => {},
+			Ok(_) => {
+				// Remove the channel from the model's list of open channels
+				bldk.ldk_data.open_channels.remove(&id);
+				// Respond to the close channel request
+				let chan_response = BlastCloseChannelResponse { success: true };
+				let response = Response::new(chan_response);
+				Ok(response)
+			},
 			Err(_) => {
 				return Err(Status::new(Code::Unknown, format!("Could not close channel.")));
 			}
 		}
-
-		// Remove the channel from the model's list of open channels
-		bldk.ldk_data.open_channels.remove(&id);
-
-		// Respond to the close channel request
-		let chan_response = BlastCloseChannelResponse { success: true };
-		let response = Response::new(chan_response);
-		Ok(response)
 	}
 
 	/// Create a comma separated list of open channels that this model has control over
@@ -489,7 +525,6 @@ impl BlastRpc for BlastLdkServer {
 		for (key, value) in &bldk.ldk_data.open_channels {
 			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.pk.to_string()));
 		}
-
 		result.pop();
 
 		let chan_response = BlastGetModelChannelsResponse { channels: result };
@@ -499,14 +534,15 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests that a node controlled by this model connects to a peer
 	async fn connect_peer(&self, request: Request<BlastConnectRequest>) -> Result<Response<BlastConnectResponse>, Status> {
-		let req = &request.get_ref();
+		log::info!("BlastLdkServer: RPC connect_peer");
 
+		// Get the peer public key from the request and convert it to a PublicKey object
+		let req = &request.get_ref();
 		let peer = match hex::decode(&req.peer_pub_key) {
 			Ok(p) => { p }
 			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
 		};
 
-		// Get the peer public key from the request and convert it to a PublicKey object
 		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
@@ -527,6 +563,7 @@ impl BlastRpc for BlastLdkServer {
 		// Attempt to connect to the peer from this node
 		let node_id = &req.node;
 		let node = self.get_node(node_id.to_string()).await?;
+		log::info!("Connecting to peer: {}", peer_pub);
 		match node.connect(peer_pub, peer_addr, true) {
 			Ok(_) => {
 				let connect_response = BlastConnectResponse { success: true };
@@ -543,14 +580,15 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Blast requests that a node controlled by this model disconnects from a peer
 	async fn disconnect_peer(&self, request: Request<BlastDisconnectRequest>) -> Result<Response<BlastDisconnectResponse>, Status> {
-		let req = &request.get_ref();
+		log::info!("BlastLdkServer: RPC disconnect_peer");
 
+		// Get the peer public key from the request and convert it to a PublicKey object
+		let req = &request.get_ref();
 		let peer = match hex::decode(&req.peer_pub_key) {
 			Ok(p) => { p }
 			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
 		};
 
-		// Get the peer public key from the request and convert it to a PublicKey object
 		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
@@ -561,6 +599,7 @@ impl BlastRpc for BlastLdkServer {
 		// Attempt to disconnect from the peer
 		let node_id = &req.node;
 		let node = self.get_node(node_id.to_string()).await?;
+		log::info!("Disconnecting from peer: {}", peer_pub);
 		match node.disconnect(peer_pub) {
 			Ok(_) => {
 				let connect_response = BlastDisconnectResponse { success: true };
@@ -577,15 +616,21 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Get a BTC address for a node
 	async fn get_btc_address(&self, request: Request<BlastBtcAddressRequest>) -> Result<Response<BlastBtcAddressResponse>, Status> {
+		log::info!("BlastLdkServer: RPC get_btc_address");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-		
+
+		// Get a new on-chain address
+		log::info!("Getting new address for node: {}", node_id);
 		let address = match node.onchain_payment().new_address() {
 			Ok(a) => a,
 			Err(_) => {
 				return Err(Status::new(Code::Unknown, "Could not get bitcoin address."));
 			}
 		};
+
+		log::info!("Got new btc address: {}", address);
 
 		let addr_response = BlastBtcAddressResponse { address: address.to_string() };
 		let response = Response::new(addr_response);
@@ -594,9 +639,10 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Get the listen address for a node
 	async fn get_listen_address(&self, request: Request<BlastListenAddressRequest>) -> Result<Response<BlastListenAddressResponse>, Status> {
+		log::info!("BlastLdkServer: RPC get_listen_address");
+
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-
 		let addr = match node.config().listening_addresses {
 			Some(a) => a,
 			None => {
@@ -611,8 +657,6 @@ impl BlastRpc for BlastLdkServer {
 			}
 		};
 
-		log::info!("------------------------ {}", a.clone().to_string());
-
 		let listen_response = BlastListenAddressResponse { address: a.clone().to_string() };
 		let response = Response::new(listen_response);
 		Ok(response)
@@ -620,6 +664,10 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Shutdown the nodes
 	async fn stop_model(&self, _request: Request<BlastStopModelRequest>) -> Result<Response<BlastStopModelResponse>, Status> {
+		log::info!("BlastLdkServer: RPC stop_model");
+
+		// Loop through the nodes and call stop
+		log::info!("Attempting to stop all nodes");
 		let mut bldk = self.blast_ldk.lock().await;
 		for (_, node) in &bldk.nodes {
 			match node.stop() {
@@ -627,12 +675,15 @@ impl BlastRpc for BlastLdkServer {
 				Err(_) => {},
 			}
 		}
-		let _ = bldk.shutdown_sender.take().unwrap().send(());
 
+		// Cleanup node data
+		log::info!("Removing node data");
+		let _ = bldk.shutdown_sender.take().unwrap().send(());
 		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let _ = fs::remove_dir_all(data_dir);
 
+		// Send the RPC response
 		let stop_response = BlastStopModelResponse { success: true };
 		let response = Response::new(stop_response);
 		Ok(response)
@@ -640,28 +691,31 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Load a previous state of this model
 	async fn load(&self, request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
+		log::info!("BlastLdkServer: RPC load");
+
+		// Set the simulation name and sim directory
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
 		let home_dir = self.get_home()?;
 		let sim_dir = String::from(SIM_DIR);
-		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir.clone(), sim_dir, sim_name, MODEL_NAME);
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
 		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Open the .tar.gz file
+		log::info!("Opening the tar archive");
 		let tar_gz = File::open(archive_path)?;
 		let decompressor = GzDecoder::new(tar_gz);
 		let mut archive = Archive::new(decompressor);
-		// Extract the archive into the specified directory
-		let home = self.get_home()?;
-		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		let data_dir = PathBuf::from(home_dir.clone()).join(DATA_DIR).display().to_string();
 		let data_path = Path::new(&data_dir);
 		fs::create_dir_all(data_path).unwrap();
 		archive.unpack(data_path).unwrap();
 
-		// Count the number of nodes to start and remove the old symlink
+		// Remove old log file
+		log::info!("Clearing out old temporary files");
         for entry in fs::read_dir(data_path).unwrap() {
             let entry = match entry {
 				Ok(e) => e,
@@ -690,28 +744,35 @@ impl BlastRpc for BlastLdkServer {
             }
         }
 
+		// Deserialize the json data file
+		log::info!("Loading the json data file");
 		let file = File::open(json_path).unwrap();
 		let reader = BufReader::new(file);
 		let data: BlastLdkData = serde_json::from_reader(reader).unwrap();
 
+		// Attempt to start the nodes
+		log::info!("Loading the ldk nodes");
 		Ok(self.load_nodes(data).await?)
 	}
 
 	/// Save this models current state
 	async fn save(&self, request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
+		log::info!("BlastLdkServer: RPC save");
+
+		// Set the simulation name and directory
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
 		let home_dir = self.get_home()?;
 		let sim_dir = String::from(SIM_DIR);
-		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir.clone(), sim_dir, sim_name, MODEL_NAME);
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
 		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Create the .tar.gz archive
-		let home = self.get_home()?;
-		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		log::info!("Creating tar archive");
+		let data_dir = PathBuf::from(home_dir.clone()).join(DATA_DIR).display().to_string();
 		if let Some(parent) = archive_path.parent() {
 			fs::create_dir_all(parent).unwrap();
 		}
@@ -720,11 +781,14 @@ impl BlastRpc for BlastLdkServer {
 		let mut tar = TarBuilder::new(enc);
 		tar.append_dir_all(".", data_dir).unwrap();
 
-		// Serialize the HashMap to JSON and write to a file
+		// Serialize the data to JSON and write to a file
+		log::info!("Creating json data file");
 		let bldk = self.blast_ldk.lock().await;
 		let json_string = serde_json::to_string_pretty(&bldk.ldk_data).unwrap();
 		fs::write(&json_path, json_string)?;
 
+		// Send the RPC response
+		log::info!("Simulation {} saved successfully", sim_name);
 		let save_response = BlastSaveResponse { success: true };
 		let response = Response::new(save_response);
 		Ok(response)
@@ -749,6 +813,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	.unwrap());
 
 	// Create the BlastLdkServer object
+	log::info!("Starting the blast_ldk model");
     let addr = RPC_ADDR.parse()?;
 	let (shutdown_sender, shutdown_receiver) = oneshot::channel::<()>();
 	let mut bldk = BlastLdk::new();
@@ -777,6 +842,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	});
 
 	log::info!("Shutting down gRPC server at {}", addr);
+	log::info!("Stopping the blast_ldk model");
 
     Ok(())
 }

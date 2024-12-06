@@ -75,7 +75,7 @@ async fn new_simulation() {
     // Print information about the current network
 
     println!("----------------------------------------------- GET NETWORK INFO -----------------------------------------------");
-    
+
     for node_id in blast.get_nodes() {
         match blast.get_pub_key(node_id.clone()).await {
             Ok(s) => {
@@ -339,7 +339,7 @@ async fn new_simulation() {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error saving simulation: {}", e));
-        }        
+        }
     }
 
     // Run the simulation
@@ -352,7 +352,7 @@ async fn new_simulation() {
         Err(e) => {
             println!("Failed to finalize the simulation: {:?}", e);
             return;
-        }        
+        }
     }
 
     // Start the simulation
@@ -434,7 +434,7 @@ async fn new_simulation() {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Error saving simulation: {}", e));
-        }        
+        }
     }
 
     // Run the simulation again
@@ -447,7 +447,7 @@ async fn new_simulation() {
         Err(e) => {
             println!("Failed to finalize the simulation: {:?}", e);
             return;
-        }        
+        }
     }
 
     // Start the simulation
@@ -491,7 +491,7 @@ async fn new_simulation() {
     match blast.stop_network().await {
         Ok(_) => {},
         Err(e) => {
-            println!("Failed to stop the network: {:?}", e);       
+            println!("Failed to stop the network: {:?}", e);
         }
     }
 
@@ -535,7 +535,7 @@ async fn load_simulation(name: String) {
             match blast.stop_network().await {
                 Ok(_) => {},
                 Err(e) => {
-                    println!("Failed to stop the network: {:?}", e);       
+                    println!("Failed to stop the network: {:?}", e);
                 }
             }
             return
@@ -621,7 +621,7 @@ async fn load_simulation(name: String) {
         Err(e) => {
             println!("Failed to finalize the simulation: {:?}", e);
             return;
-        }        
+        }
     }
 
     // Start the simulation
@@ -665,7 +665,7 @@ async fn load_simulation(name: String) {
     match blast.stop_network().await {
         Ok(_) => {},
         Err(e) => {
-            println!("Failed to stop the network: {:?}", e);       
+            println!("Failed to stop the network: {:?}", e);
         }
     }
 

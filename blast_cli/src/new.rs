@@ -50,7 +50,7 @@ impl BlastTab for NewTab {
         .iter()
         .map(|i| ListItem::new(i.clone()))
         .collect();
-        
+
         let tasks = List::new(tasks)
         .block(Block::bordered().title("Models"))
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))

@@ -81,6 +81,7 @@ struct ClnChannel {
 	chan_id: String
 }
 
+// The CLN data that will be saved to disk when a simulation is saved
 #[derive(Serialize, Deserialize, Debug)]
 struct BlastClnData {
 	simln_data: SimJsonFile,
@@ -159,17 +160,16 @@ impl BlastClnServer {
 		}
 	}
 
+	/// Load the saved nodes using the saved data
 	async fn load_nodes(&self, data: BlastClnData) -> Result<Response<BlastLoadResponse>,Status> {
 		let mut bcln = self.blast_cln.lock().await;
 		let mut nodes: HashMap<String, NodeClient<Channel>> = HashMap::new();
-
-		// Start the requested number of cln nodes
 		for n in &data.simln_data.nodes {
 			// Create a node id, get available ports and set the cert paths
 			let node_id = n.id.clone();
 			let port = &data.ports.get(&node_id).unwrap().0.clone();
 			let rpcport = &data.ports.get(&node_id).unwrap().1.clone();
-	
+
 			// Create a new client from the connected channel
 			let (_,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
 			nodes.insert(node_id.clone(), c);
@@ -184,10 +184,11 @@ impl BlastClnServer {
 		Ok(response)
 	}
 
+	/// Start a node with a given id and ports
 	async fn start_node(&self, node_id: String, port: String, rpcport: String) -> Result<(SimLnNode,NodeClient<Channel>),Status> {
+		// Set the node file paths and address
 		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
-
 		let cln_dir = format!("{}/{}", data_dir, node_id);
 		let addr = format!("{}:{}", "https://localhost", rpcport.to_string());
 		let ca_path = format!("{}{}", cln_dir, "/regtest/ca.pem");
@@ -261,6 +262,8 @@ impl BlastClnServer {
 impl BlastRpc for BlastClnServer {
 	/// Start a certain number of nodes
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
+		log::info!("BlastClnServer: RPC start_nodes");
+
 		let num_nodes = request.get_ref().num_nodes;
 		let mut bcln = self.blast_cln.lock().await;
 
@@ -270,7 +273,7 @@ impl BlastRpc for BlastClnServer {
 			let node_id = format!("{}{:04}", "blast_cln-", i);
 			let port = self.get_available_port(8000, 9000)?;
 			let rpcport = self.get_available_port(port+1, 9000)?.to_string();
-	
+
 			// Create a new client from the connected channel
 			let (n,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
 			bcln.nodes.insert(node_id.clone(), c);
@@ -287,6 +290,8 @@ impl BlastRpc for BlastClnServer {
 
 	/// Get the sim-ln data for this model
 	async fn get_sim_ln(&self, _request: Request<BlastSimlnRequest>) -> Result<Response<BlastSimlnResponse>, Status> {
+		log::info!("BlastClnServer: RPC get_sim_ln");
+
 		// Serialize the SimLn data into a json string
 		let bcln = self.blast_cln.lock().await;
 		let data = match serde_json::to_string(&bcln.cln_data.simln_data) {
@@ -305,9 +310,10 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests the pub key of a node that is controlled by this model
 	async fn get_pub_key(&self, request: Request<BlastPubKeyRequest>,) -> Result<Response<BlastPubKeyResponse>, Status> {
+		log::info!("BlastClnServer: RPC get_pub_key");
+
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let cln_resp = match node.getinfo(GetinfoRequest{}).await {
 			Ok(r) => {
 				r.into_inner()
@@ -324,9 +330,10 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests the list of peers for a node that is controlled by this model
 	async fn list_peers(&self, request: Request<BlastPeersRequest>,) -> Result<Response<BlastPeersResponse>, Status> {
+		log::info!("BlastClnServer: RPC list_peers");
+
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let cln_resp = match node.list_peers(ListpeersRequest{id: None, level: None}).await {
 			Ok(r) => {
 				r.into_inner()
@@ -336,6 +343,9 @@ impl BlastRpc for BlastClnServer {
 			}
 		};
 
+		log::info!("Peers: {:?}", cln_resp.peers);
+
+		// TODO: format in a consistent way
 		let peers = format!("{:?}", cln_resp.peers);
 
 		let peers_response = BlastPeersResponse { peers: peers };
@@ -345,9 +355,10 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests the wallet balance of a node that is controlled by this model
 	async fn wallet_balance(&self, request: Request<BlastWalletBalanceRequest>) -> Result<Response<BlastWalletBalanceResponse>, Status> {
+		log::info!("BlastClnServer: RPC wallet_balance");
+
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let cln_resp = match node.list_funds(ListfundsRequest{spent: None}).await {
 			Ok(r) => {
 				r.into_inner()
@@ -357,8 +368,11 @@ impl BlastRpc for BlastClnServer {
 			}
 		};
 
+		log::info!("Wallet balance: {:?}", cln_resp.outputs);
+
+		// TODO: format in a consistent way
 		let balance = format!("{:?}", cln_resp.outputs);
-		
+
 		let balance_response = BlastWalletBalanceResponse { balance: balance };
 		let response = Response::new(balance_response);
 		Ok(response)
@@ -366,9 +380,10 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests the channel balance of a node that is controlled by this model
 	async fn channel_balance(&self, request: Request<BlastChannelBalanceRequest>) -> Result<Response<BlastChannelBalanceResponse>, Status> {
+		log::info!("BlastClnServer: RPC channel_balance");
+
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let cln_resp = match node.list_funds(ListfundsRequest{spent: None}).await {
 			Ok(r) => {
 				r.into_inner()
@@ -378,6 +393,9 @@ impl BlastRpc for BlastClnServer {
 			}
 		};
 
+		log::info!("Channel balance: {:?}", cln_resp.channels);
+
+		// TODO: format in a consistent way
 		let balance = format!("{:?}", cln_resp.channels);
 
 		let balance_response = BlastChannelBalanceResponse { balance: balance };
@@ -387,9 +405,10 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests the list of channels for a node that is controlled by this model
 	async fn list_channels(&self, request: Request<BlastListChannelsRequest>) -> Result<Response<BlastListChannelsResponse>, Status> {
+		log::info!("BlastClnServer: RPC list_channels");
+
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let cln_resp = match node.list_channels(ListchannelsRequest{short_channel_id: None, source: None, destination: None}).await {
 			Ok(r) => {
 				r.into_inner()
@@ -399,6 +418,9 @@ impl BlastRpc for BlastClnServer {
 			}
 		};
 
+		log::info!("Channels: {:?}", cln_resp.channels);
+
+		// TODO: format in a consistent way
 		let channels = format!("{:?}", cln_resp.channels);
 
 		let chan_response = BlastListChannelsResponse { channels: channels };
@@ -408,6 +430,9 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests that a node controlled by this model opens a channel
 	async fn open_channel(&self, request: Request<BlastOpenChannelRequest>) -> Result<Response<BlastOpenChannelResponse>, Status> {
+		log::info!("BlastClnServer: RPC open_channel");
+
+		// Set the channel details
 		let req = &request.get_ref();
 		let node_id = &req.node;
 		let peer = &req.peer_pub_key;
@@ -418,13 +443,13 @@ impl BlastRpc for BlastClnServer {
 		let id = req.channel_id;
 		let amount = req.amount;
 		let push = Amount { msat: req.push_amout as u64 };
-
-		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let a = Amount { msat: amount as u64 };
 		let v = Value::Amount(a);
 		let aora = AmountOrAll { value: Some(v) };
 
+		// Attempt to open the channel
+		log::info!("Opening channel from {} to {} for the amount: {}", node_id, peer.to_string(), amount);
+		let mut node = self.get_node(node_id.to_string()).await?;
 		let cln_resp = match node.fund_channel(FundchannelRequest{
 			amount: Some(aora),
 			announce: None,
@@ -448,6 +473,8 @@ impl BlastRpc for BlastClnServer {
 			}
 		};
 
+		// Saving channel details
+		log::info!("Channel opened, saving details");
 		let chanid = hex::encode(cln_resp.channel_id);
 		let mut bcln = self.blast_cln.lock().await;
 		bcln.cln_data.open_channels.insert(id, ClnChannel { source: node_id.to_string(), dest_pk: peer.to_string(), chan_id: chanid });
@@ -460,6 +487,9 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests that a node controlled by this model closes a channel
 	async fn close_channel(&self, request: Request<BlastCloseChannelRequest>) -> Result<Response<BlastCloseChannelResponse>, Status> {
+		log::info!("BlastClnServer: RPC close_channel");
+
+		// Set the channel details
 		let req = &request.get_ref();
 		let node_id = &req.node;
 		let id = &req.channel_id;
@@ -472,6 +502,8 @@ impl BlastRpc for BlastClnServer {
 			}
 		};
 
+		// Attempt to close the channel
+		log::info!("Closing channel: {}", chanid.to_string());
 		match node.close(CloseRequest{
 			id: chanid.to_string(),
 			unilateraltimeout: None,
@@ -501,7 +533,6 @@ impl BlastRpc for BlastClnServer {
 		for (key, value) in &bcln.cln_data.open_channels {
 			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.dest_pk));
 		}
-
 		result.pop();
 
 		let chan_response = BlastGetModelChannelsResponse { channels: result };
@@ -511,8 +542,10 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests that a node controlled by this model connects to a peer
 	async fn connect_peer(&self, request: Request<BlastConnectRequest>) -> Result<Response<BlastConnectResponse>, Status> {
-		let req = &request.get_ref();
+		log::info!("BlastClnServer: RPC connect_peer");
 
+		// Set the peer details
+		let req = &request.get_ref();
 		let peer_pub = &req.peer_pub_key;
 		let fulladdr = req.peer_addr.clone();
 		let parts: Vec<&str> = fulladdr.split(':').collect();
@@ -525,9 +558,9 @@ impl BlastRpc for BlastClnServer {
 		};
 
 		// Attempt to connect to the peer from this node
+		log::info!("Connecting to peer: {}", peer_pub);
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		match node.connect_peer(ConnectRequest{id: String::from(peer_pub), host: Some(String::from(addr)), port: Some(port)}).await {
 			Ok(_) => {
 				let connect_response = BlastConnectResponse { success: true };
@@ -542,14 +575,19 @@ impl BlastRpc for BlastClnServer {
 
 	/// Blast requests that a node controlled by this model disconnects from a peer
 	async fn disconnect_peer(&self, request: Request<BlastDisconnectRequest>) -> Result<Response<BlastDisconnectResponse>, Status> {
+		log::info!("BlastClnServer: RPC disconnect_peer");
+
+		// Get the node and the peer id
 		let req = &request.get_ref();
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-
 		let id = match hex::decode(&req.peer_pub_key) {
 			Ok(i) => { i }
 			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
 		};
+
+		// Attempt to disconnect
+		log::info!("Disconnecting from peer: {}", &req.peer_pub_key);
 		match node.disconnect(DisconnectRequest{id: id, force: None}).await {
 			Ok(_) => {
 				let connect_response = BlastDisconnectResponse { success: true };
@@ -564,9 +602,13 @@ impl BlastRpc for BlastClnServer {
 
 	/// Get a BTC address for a node
 	async fn get_btc_address(&self, request: Request<BlastBtcAddressRequest>) -> Result<Response<BlastBtcAddressResponse>, Status> {
+		log::info!("BlastClnServer: RPC get_btc_address");
+
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
 
+		// Get a new on-chain address
+		log::info!("Getting new address for node: {}", node_id);
 		let cln_resp = match node.new_addr(NewaddrRequest{addresstype: Some(3)}).await {
 			Ok(r) => {
 				r.into_inner()
@@ -580,6 +622,10 @@ impl BlastRpc for BlastClnServer {
 			Some(a) => { a },
 			None => return Err(Status::new(Code::Unknown, "Could not get btc address.")),
 		};
+
+		log::info!("Got new btc address: {}", addr);
+
+		// Send the RPC response
 		let addr_response = BlastBtcAddressResponse { address: addr };
 		let response = Response::new(addr_response);
 		Ok(response)
@@ -587,16 +633,18 @@ impl BlastRpc for BlastClnServer {
 
 	/// Get the listen address for a node
 	async fn get_listen_address(&self, request: Request<BlastListenAddressRequest>) -> Result<Response<BlastListenAddressResponse>, Status> {
+		log::info!("BlastClnServer: RPC get_listen_address");
+
 		let node_id = &request.get_ref().node;
 		let bcln = self.blast_cln.lock().await;
-
 		let addr = match bcln.cln_data.addresses.get(node_id) {
 			Some(a) => a,
 			None => {
 				return Err(Status::new(Code::InvalidArgument, format!("No addresses")));
 			}
 		};
-		
+
+		// Send the RPC response
 		let listen_response = BlastListenAddressResponse { address: addr.clone() };
 		let response = Response::new(listen_response);
 		Ok(response)
@@ -604,10 +652,14 @@ impl BlastRpc for BlastClnServer {
 
 	/// Shutdown the nodes
 	async fn stop_model(&self, _request: Request<BlastStopModelRequest>) -> Result<Response<BlastStopModelResponse>, Status> {
+		log::info!("BlastClnServer: RPC stop_model");
+
 		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home.clone()).join(DATA_DIR).display().to_string();
 		let socket_dir = PathBuf::from(home).join(".blast/clightning/sockets").display().to_string();
 
+		// Loop through the nodes and call stop. If the stop call fails, kills the process
+		log::info!("Attempting to stop all nodes");
         let mut bcln = self.blast_cln.lock().await;
 		for (id, node) in &mut bcln.nodes {
 			match node.stop(StopRequest{}).await {
@@ -626,10 +678,13 @@ impl BlastRpc for BlastClnServer {
 			}
 		}
 
+		// Cleanup node data
+		log::info!("Removing node data");
         let _ = bcln.shutdown_sender.take().unwrap().send(());
 		let _ = fs::remove_dir_all(data_dir);
 		let _ = fs::remove_dir_all(socket_dir);
 
+		// Send the RPC response
 		let stop_response = BlastStopModelResponse { success: true };
 		let response = Response::new(stop_response);
 		Ok(response)
@@ -637,6 +692,9 @@ impl BlastRpc for BlastClnServer {
 
 	/// Load a previous state of this model
 	async fn load(&self, request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
+		log::info!("BlastClnServer: RPC load");
+
+		// Set the simulation name and sim directory
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
 		let home_dir = self.get_home()?;
@@ -648,17 +706,18 @@ impl BlastRpc for BlastClnServer {
 		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Open the .tar.gz file
+		log::info!("Opening the tar archive");
 		let tar_gz = File::open(archive_path)?;
 		let decompressor = GzDecoder::new(tar_gz);
 		let mut archive = Archive::new(decompressor);
-		// Extract the archive into the specified directory
 		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let data_path = Path::new(&data_dir);
 		fs::create_dir_all(data_path).unwrap();
 		archive.unpack(data_path).unwrap();
 
-		// Count the number of nodes to start and remove the old symlink
+		// Remove old log file and pid file
+		log::info!("Clearing out old temporary files");
         for entry in fs::read_dir(data_path).unwrap() {
             let entry = match entry {
 				Ok(e) => e,
@@ -694,16 +753,22 @@ impl BlastRpc for BlastClnServer {
             }
         }
 
+		// Deserialize the json data file
+		log::info!("Loading the json data file");
 		let file = File::open(json_path).unwrap();
 		let reader = BufReader::new(file);
 		let data: BlastClnData = serde_json::from_reader(reader).unwrap();
 
 		// Attempt to start the nodes
+		log::info!("Loading the cln nodes");
 		Ok(self.load_nodes(data).await?)
 	}
 
 	/// Save this models current state
 	async fn save(&self, request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
+		log::info!("BlastClnServer: RPC save");
+
+		// Set the simulation name and directory
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
 		let home_dir = self.get_home()?;
@@ -715,6 +780,7 @@ impl BlastRpc for BlastClnServer {
 		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Create the .tar.gz archive
+		log::info!("Creating tar archive");
 		let home = self.get_home()?;
 		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		if let Some(parent) = archive_path.parent() {
@@ -726,10 +792,13 @@ impl BlastRpc for BlastClnServer {
 		tar.append_dir_all(".", data_dir).unwrap();
 
 		// Serialize the data to JSON and write to a file
+		log::info!("Creating json data file");
 		let bcln = self.blast_cln.lock().await;
 		let json_string = serde_json::to_string_pretty(&bcln.cln_data).unwrap();
 		fs::write(&json_path, json_string)?;
 
+		// Send the RPC response
+		log::info!("Simulation {} saved successfully", sim_name);
 		let save_response = BlastSaveResponse { success: true };
 		let response = Response::new(save_response);
 		Ok(response)
@@ -748,6 +817,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		File::create(folder_path).unwrap(),
 	);
 
+	// Create the cln RPC server
+	log::info!("Starting the blast_cln model");
     let addr = RPC_ADDR.parse()?;
 	let (shutdown_sender, shutdown_receiver) = oneshot::channel::<()>();
 	let mut bcln = BlastCln::new();
@@ -773,6 +844,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = server.await;
 
 	log::info!("Shutting down gRPC server at {}", addr);
+	log::info!("Stopping the blast_cln model");
 
     Ok(())
 }
