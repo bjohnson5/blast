@@ -77,7 +77,14 @@ func (s *BlastRpcServer) ListPeers(ctx context.Context, request *pb.BlastPeersRe
 			err_val = err
 		} else {
 			err_val = nil
-			response.Peers = resp.String()
+			var result strings.Builder
+			BlastLndLog(resp.String())
+			for _, p := range resp.Peers {
+				result.WriteString("Pubkey: " + p.PubKey + ", Address: " + p.Address)
+				result.WriteString("\n") // Add a newline after each line
+			}
+
+			response.Peers = result.String()
 		}
 	}
 
@@ -99,7 +106,8 @@ func (s *BlastRpcServer) WalletBalance(ctx context.Context, request *pb.BlastWal
 			err_val = err
 		} else {
 			err_val = nil
-			response.Balance = resp.String()
+			BlastLndLog(resp.String())
+			response.Balance = fmt.Sprintf("%d", resp.TotalBalance)
 		}
 	}
 
@@ -121,7 +129,8 @@ func (s *BlastRpcServer) ChannelBalance(ctx context.Context, request *pb.BlastCh
 			err_val = err
 		} else {
 			err_val = nil
-			response.Balance = resp.String()
+			BlastLndLog(resp.String())
+			response.Balance = fmt.Sprintf("%d", resp.LocalBalance.Sat)
 		}
 	}
 
@@ -143,7 +152,14 @@ func (s *BlastRpcServer) ListChannels(ctx context.Context, request *pb.BlastList
 			err_val = err
 		} else {
 			err_val = nil
-			response.Channels = resp.String()
+			var result strings.Builder
+			BlastLndLog(resp.String())
+			for _, c := range resp.Channels {
+				result.WriteString("Peer: " + c.RemotePubkey + ", Amount: " + fmt.Sprintf("%d", c.Capacity))
+				result.WriteString("\n")
+			}
+
+			response.Channels = result.String()
 		}
 	}
 

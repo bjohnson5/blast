@@ -345,10 +345,13 @@ impl BlastRpc for BlastClnServer {
 
 		log::info!("Peers: {:?}", cln_resp.peers);
 
-		// TODO: format in a consistent way
-		let peers = format!("{:?}", cln_resp.peers);
+		let mut result = String::new();
+		for p in cln_resp.peers {
+			result.push_str(&format!("Pubkey: {}, Address: {}", hex::encode(p.id), p.netaddr[0]));
+			result.push('\n');
+		}
 
-		let peers_response = BlastPeersResponse { peers: peers };
+		let peers_response = BlastPeersResponse { peers: result };
 		let response = Response::new(peers_response);
 		Ok(response)
 	}
@@ -370,10 +373,14 @@ impl BlastRpc for BlastClnServer {
 
 		log::info!("Wallet balance: {:?}", cln_resp.outputs);
 
-		// TODO: format in a consistent way
-		let balance = format!("{:?}", cln_resp.outputs);
+		let mut balance = 0;
+		for o in cln_resp.outputs {
+			if let Some(amount) = o.amount_msat {
+				balance = balance + amount.msat;
+			}
+		}
 
-		let balance_response = BlastWalletBalanceResponse { balance: balance };
+		let balance_response = BlastWalletBalanceResponse { balance: (balance / 1000).to_string() };
 		let response = Response::new(balance_response);
 		Ok(response)
 	}
@@ -395,10 +402,14 @@ impl BlastRpc for BlastClnServer {
 
 		log::info!("Channel balance: {:?}", cln_resp.channels);
 
-		// TODO: format in a consistent way
-		let balance = format!("{:?}", cln_resp.channels);
+		let mut balance = 0;
+		for c in cln_resp.channels {
+			if let Some(amount) = c.our_amount_msat {
+				balance = balance + amount.msat;
+			}
+		}
 
-		let balance_response = BlastChannelBalanceResponse { balance: balance };
+		let balance_response = BlastChannelBalanceResponse { balance: (balance / 1000).to_string() };
 		let response = Response::new(balance_response);
 		Ok(response)
 	}
@@ -420,10 +431,17 @@ impl BlastRpc for BlastClnServer {
 
 		log::info!("Channels: {:?}", cln_resp.channels);
 
-		// TODO: format in a consistent way
-		let channels = format!("{:?}", cln_resp.channels);
+		let mut result = String::new();
+		for c in cln_resp.channels {
+			if c.direction == 1 {
+				if let Some(amount) = c.amount_msat {
+					result.push_str(&format!("Peer: {}, Amount: {}", hex::encode(c.destination), amount.msat / 1000));
+					result.push('\n');
+				}
+			}
+		}
 
-		let chan_response = BlastListChannelsResponse { channels: channels };
+		let chan_response = BlastListChannelsResponse { channels: result };
 		let response = Response::new(chan_response);
 		Ok(response)
 	}
@@ -441,8 +459,8 @@ impl BlastRpc for BlastClnServer {
 			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
 		};
 		let id = req.channel_id;
-		let amount = req.amount;
-		let push = Amount { msat: req.push_amout as u64 };
+		let amount = req.amount * 1000;
+		let push = Amount { msat: req.push_amout as u64 * 1000 };
 		let a = Amount { msat: amount as u64 };
 		let v = Value::Amount(a);
 		let aora = AmountOrAll { value: Some(v) };

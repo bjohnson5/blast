@@ -363,10 +363,13 @@ impl BlastRpc for BlastLdkServer {
 
 		log::info!("Peers: {:?}", peers_resp);
 
-		// TODO: format in a consistent way
-		let peers = format!("{:?}", peers_resp);
+		let mut result = String::new();
+		for p in peers_resp {
+			result.push_str(&format!("Pubkey: {}, Address: {}", p.node_id, p.address));
+			result.push('\n');
+		}
 
-		let peers_response = BlastPeersResponse { peers: peers };
+		let peers_response = BlastPeersResponse { peers: result };
 		let response = Response::new(peers_response);
 		Ok(response)
 	}
@@ -377,12 +380,11 @@ impl BlastRpc for BlastLdkServer {
 
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-		let balance = node.list_balances().total_onchain_balance_sats;
+		let balance = node.list_balances();
 
-		log::info!("Wallet balance: {:?}", balance.to_string());
+		log::info!("Wallet balance: {:?}", balance);
 
-		// TODO: format in a consistent way
-		let b = balance.to_string();
+		let b = balance.total_onchain_balance_sats.to_string();
 
 		let balance_response = BlastWalletBalanceResponse { balance: b };
 		let response = Response::new(balance_response);
@@ -395,12 +397,11 @@ impl BlastRpc for BlastLdkServer {
 
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-		let balance = node.list_balances().total_lightning_balance_sats;
+		let balance = node.list_balances();
 
-		log::info!("Channel balance: {:?}", balance.to_string());
+		log::info!("Channel balance: {:?}", balance);
 
-		// TODO: format in a consistent way
-		let b = balance.to_string();
+		let b = balance.total_lightning_balance_sats.to_string();
 
 		let balance_response = BlastChannelBalanceResponse { balance: b };
 		let response = Response::new(balance_response);
@@ -413,14 +414,17 @@ impl BlastRpc for BlastLdkServer {
 
 		let node_id = &request.get_ref().node;
 		let node = self.get_node(node_id.to_string()).await?;
-		let c = node.list_channels();
+		let chans = node.list_channels();
 
-		log::info!("Channels: {:?}", c);
+		log::info!("Channels: {:?}", chans);
 
-		// TODO: format in a consistent way
-		let chans = format!("{:?}", c);
+		let mut result = String::new();
+		for c in chans {
+			result.push_str(&format!("Peer: {}, Amount: {}", c.counterparty_node_id, c.channel_value_sats));
+			result.push('\n');
+		}
 
-		let chan_response = BlastListChannelsResponse { channels: chans };
+		let chan_response = BlastListChannelsResponse { channels: result };
 		let response = Response::new(chan_response);
 		Ok(response)
 	}
