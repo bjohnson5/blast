@@ -118,8 +118,8 @@ impl BlastModelManager {
         // Get the current working directory
         let mut current_dir = match env::current_dir() {
             Ok(d) => d,
-            Err(_) => {
-                return Err(String::from("Failed to get the current directory"));
+            Err(e) => {
+                return Err(format!("Failed to get the current directory: {:?}", e));
             }
         };
     
@@ -185,12 +185,12 @@ impl BlastModelManager {
         // Create a stop request
         let request = tonic::Request::new(BlastStopModelRequest {
         });
-    
+
         // Execute the stop RPC
         let response = match client.stop_model(request).await {
             Ok(r) => r,
-            Err(_) => {
-                return Err(String::from("RPC stop_model failed"));
+            Err(e) => {
+                return Err(format!("RPC stop_model failed: {:?}", e));
             }
         };
 
@@ -277,8 +277,8 @@ impl BlastModelManager {
         // Execute the start RPC
         let response = match client.start_nodes(request).await {
             Ok(r) => r,
-            Err(_) => {
-                return Err(String::from("RPC start nodes failed"));
+            Err(e) => {
+                return Err(format!("RPC start nodes failed: {:?}", e));
             }
         };
 
@@ -288,8 +288,8 @@ impl BlastModelManager {
             let request = tonic::Request::new(BlastSimlnRequest {});
             let response = match client.get_sim_ln(request).await {
                 Ok(r) => r,
-                Err(_) => {
-                    return Err(String::from("RPC get_sim_ln failed"));
+                Err(e) => {
+                    return Err(format!("RPC get_sim_ln failed: {:?}", e));
                 }
             };
             match std::str::from_utf8(&response.get_ref().simln_data) {

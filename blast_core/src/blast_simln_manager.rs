@@ -9,13 +9,13 @@ use std::env;
 
 // Extra dependencies
 use serde::{Serialize, Deserialize};
-use sim_lib::ActivityDefinition;
-use sim_lib::Simulation;
-use sim_lib::LightningNode;
-use sim_lib::SimParams;
-use sim_lib::*;
-use sim_lib::lnd::*;
-use sim_lib::cln::*;
+use simln_lib::ActivityDefinition;
+use simln_lib::Simulation;
+use simln_lib::LightningNode;
+use simln_lib::SimParams;
+use simln_lib::*;
+use simln_lib::lnd::*;
+use simln_lib::cln::*;
 use anyhow::{anyhow, Error};
 use bitcoin::secp256k1::PublicKey;
 use tokio::sync::Mutex;
@@ -211,16 +211,18 @@ impl BlastSimLnManager {
         let folder_path = PathBuf::from(home).join(RESULTS_DIR);
 
         let sim = Simulation::new(
+            SimulationCfg::new(
+                Some(crate::TOTAL_FRAMES as u32),
+                EXPECTED_PAYMENT_AMOUNT,
+                ACTIVITY_MULTIPLIER,
+                Some(WriteResults {
+                    results_dir: folder_path,
+                    batch_size: 1,
+                }),
+                None
+            ),
             clients,
             validated_activities,
-            Some(crate::TOTAL_FRAMES as u32),
-            EXPECTED_PAYMENT_AMOUNT,
-            ACTIVITY_MULTIPLIER,
-            Some(WriteResults {
-                results_dir: folder_path,
-                batch_size: 1,
-            }),
-            None
         );
         self.sim = Some(sim);
         Ok(())
@@ -242,7 +244,12 @@ impl BlastSimLnManager {
         // Start the sim-ln simulation
         match &self.sim {
             Some(s) => {
-                s.run().await?;
+                match s.run().await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Err(anyhow!("Error starting simulation: {:?}", e));
+                    }
+                }
                 Ok(())
             },
             None => return Err(anyhow!("Simln not setup. Call set_simln before starting the simulation")),
@@ -271,7 +278,7 @@ impl BlastSimLnManager {
         for n in &self.data.nodes {
             let id = match n {
                 NodeConnection::LND(c) => c.id.to_string(),
-                NodeConnection::CLN(_) => String::from(""),
+                NodeConnection::CLN(c) => c.id.to_string(),
             };
             ids.push(id);
         }

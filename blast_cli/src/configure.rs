@@ -150,8 +150,8 @@ impl BlastTab for ConfigureTab {
             "start".bold(),
             " command to start simulation, ".into(),
             "help".bold(),
-            " command to show commands,".into(),
-            "Tab".bold(),
+            " command to show commands, ".into(),
+            "tab".bold(),
             " to change sections".into()
         ];
         let text = Text::from(Line::from(msg)).patch_style(Style::default());

@@ -262,7 +262,7 @@ func (s *BlastRpcServer) ConnectPeer(ctx context.Context, request *pb.BlastConne
 	}
 
 	if client, ok := s.blast_lnd.clients[request.Node]; ok {
-		req := &lnrpc.ConnectPeerRequest{Addr: &lnrpc.LightningAddress{Pubkey: request.PeerPubKey, Host: request.PeerAddr}, Perm: false, Timeout: 5}
+		req := &lnrpc.ConnectPeerRequest{Addr: &lnrpc.LightningAddress{Pubkey: request.PeerPubKey, Host: request.PeerAddr}, Perm: true, Timeout: 5}
 		ctx := context.Background()
 		_, err := client.ConnectPeer(ctx, req)
 		if err != nil {
@@ -359,7 +359,7 @@ func (s *BlastRpcServer) Load(ctx context.Context, request *pb.BlastLoadRequest)
 		return response, err
 	}
 
-	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+	sim_dir := homeDir + "/" + SIM_DIR + "/" + request.Sim + "/" + MODEL_NAME + "/"
 
 	err = s.blast_lnd.load_nodes(sim_dir + request.Sim + ".tar.gz")
 	if err != nil {
@@ -387,7 +387,7 @@ func (s *BlastRpcServer) Save(ctx context.Context, request *pb.BlastSaveRequest)
 		return response, err
 	}
 
-	sim_dir := homeDir + SIM_DIR + request.Sim + "/" + MODEL_NAME + "/"
+	sim_dir := homeDir + "/" + SIM_DIR + "/" + request.Sim + "/" + MODEL_NAME + "/"
 
 	if _, err := os.Stat(sim_dir); os.IsNotExist(err) {
 		os.MkdirAll(sim_dir, 0700)

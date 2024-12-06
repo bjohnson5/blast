@@ -13,7 +13,6 @@ use simplelog::WriteLogger;
 use simplelog::Config;
 use log::LevelFilter;
 use tokio::task::JoinSet;
-use anyhow::Error as AnyError;
 
 // TUI libraries
 use ratatui::{
@@ -88,7 +87,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
     let mut error: Option<String> = None;
     let running = Arc::new(AtomicBool::new(true));
     let mut running_models: Vec<Child> = Vec::new();
-    let mut sim_tasks: Option<JoinSet<Result<(), AnyError>>> = None;
+    let mut sim_tasks: Option<JoinSet<()>> = None;
 
     loop {
         // Draw the frame
@@ -423,7 +422,7 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                 output.push(String::from("close_channel     source_node channel_id"));
                 output.push(String::from("connect_peer      source_node dest_node"));
                 output.push(String::from("disconnect_peer   source_node dest_node"));
-                output.push(String::from("fund_node         source_node"));
+                output.push(String::from("fund_node         source_node amount_btc"));
             }
             "save" => {
                 match blast.save(words.next().unwrap_or("simulation1")).await {
@@ -599,7 +598,11 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
             },
             "fund_node" => {
                 let source = String::from(words.next().unwrap_or(""));
-                match blast.fund_node(source, true).await {
+                let amount = match words.next().unwrap_or("1.0").parse::<f64>() {
+                    Ok(value) => { value },
+                    Err(_) => { 1.0 }
+                };
+                match blast.fund_node(source, amount, true).await {
                     Ok(_) => {},
                     Err(e) => {
                         let msg = format!("Unable to fund node: {}", e);

@@ -53,10 +53,13 @@ pub mod blast_proto {
 pub const MODEL_NAME: &str = "blast_ldk";
 
 // The directory to save simulations
-pub const SIM_DIR: &str = "/.blast/blast_sims/";
+pub const SIM_DIR: &str = ".blast/blast_sims";
 
 // The temporary directory to save runtime ldk data
-pub const DATA_DIR: &str = "/blast_data/";
+pub const DATA_DIR: &str = ".blast/blast_data/blast_ldk";
+
+// The address to connect to this model
+pub const RPC_ADDR: &str = "127.0.0.1:5051";
 
 // The data that is stored in the sim-ln sim.json file
 #[derive(Serialize, Deserialize, Debug)]
@@ -115,11 +118,17 @@ impl<'de> Deserialize<'de> for Channel {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct BlastLdkData {
+	simln_data: SimJsonFile,
+	ports: HashMap<String, (String, String)>,
+	open_channels: HashMap<i64, Channel>,
+}
+
 // The main data structure for the LDK model
 struct BlastLdk {
     nodes: HashMap<String, Arc<Node>>,
-	simln_data: String,
-	open_channels: HashMap<i64, Channel>,
+	ldk_data: BlastLdkData,
 	shutdown_sender: Option<oneshot::Sender<()>>
 }
 
@@ -128,8 +137,7 @@ impl BlastLdk {
     fn new() -> Self {
         Self {
             nodes: HashMap::new(),
-			simln_data: String::from(""),
-			open_channels: HashMap::new(),
+			ldk_data: BlastLdkData{ simln_data: SimJsonFile{nodes: Vec::new()}, ports: HashMap::new(), open_channels: HashMap::new()},
 			shutdown_sender: None
         }
     }
@@ -143,7 +151,7 @@ struct BlastLdkServer {
 
 // Helper functions for the RPC server
 impl BlastLdkServer {
-	// Get an ldk-node "Node" object from an id
+	/// Get an ldk-node "Node" object from an id
 	async fn get_node(&self, id: String) -> Result<Arc<Node>, Status> {
 		let bldk = self.blast_ldk.lock().await;
 		let node = match bldk.nodes.get(&id) {
@@ -156,17 +164,125 @@ impl BlastLdkServer {
 		Ok(node.clone())
 	}
 
-	// Get an available port that can be used for listening
-	fn get_available_port(&self) -> Option<u16> {
-		(8000..9000).find(|port| self.port_is_available(*port))
+	/// Get the HOME environment variable
+	fn get_home(&self) -> Result<String, Status> {
+		match env::var("HOME") {
+			Ok(h) => {
+				Ok(h)
+			},
+			Err(_) => {
+				Err(Status::new(Code::NotFound, "HOME environment variable is not set."))
+			}
+		}
 	}
 
-	// Check if a port is available
+	/// Get an available port that can be used for listening
+	fn get_available_port(&self, start: u16, end: u16) -> Result<u16, Status> {
+		match (start..end).find(|port| self.port_is_available(*port)) {
+			Some(p) => {
+				Ok(p)
+			},
+			None => {
+				Err(Status::new(Code::NotFound, "Could not find an available port."))
+			}
+		}
+	}
+
+	/// Check if a port is available
 	fn port_is_available(&self, port: u16) -> bool {
 		match TcpListener::bind(("127.0.0.1", port)) {
 			Ok(_) => true,
 			Err(_) => false,
 		}
+	}
+
+	async fn load_nodes(&self, data: BlastLdkData) -> Result<Response<BlastLoadResponse>,Status> {
+		let mut bldk = self.blast_ldk.lock().await;
+		let mut nodes: HashMap<String, Arc<Node>> = HashMap::new();
+
+		// Start the requested number of cln nodes
+		for n in &data.simln_data.nodes {
+			// Create a node id, get available ports and set the cert paths
+			let node_id = n.id.clone();
+			let port = &data.ports.get(&node_id).unwrap().0.clone();
+			let rpcport = &data.ports.get(&node_id).unwrap().1.clone();
+	
+			// Create a new client from the connected channel
+			let (_,c) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
+			nodes.insert(node_id.clone(), c);
+		}
+
+		bldk.ldk_data = data;
+		bldk.nodes = nodes;
+
+		// Return the response to start_nodes
+		let start_response = BlastLoadResponse { success: true };
+		let response = Response::new(start_response);
+		Ok(response)
+	}
+
+	async fn start_node(&self, node_id: String, port: String, rpcport: String) -> Result<(SimLnNode,Arc<Node>),Status> {
+		let home = self.get_home()?;
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
+		let alias = node_id.as_bytes();
+		let mut alias_array = [0u8; 32];
+		let len = alias.len().min(alias_array.len());
+		alias_array[..len].copy_from_slice(alias);
+		let node_alias = NodeAlias(alias_array);
+
+		// Set up the listening address for this node
+		let mut listen_addr_list: Vec<SocketAddress> = Vec::new();
+		let addr = format!("127.0.0.1:{}", port);
+		let rpcaddr = format!("127.0.0.1:{}", rpcport);
+		let address = match SocketAddress::from_str(&addr) {
+			Ok(a) => a,
+			Err(_) => {
+				return Err(Status::new(Code::InvalidArgument, "Could not create listen address."));
+			}
+		};
+		listen_addr_list.push(address);
+
+		// Create the config for this node
+		let config = Config {
+			storage_dir_path: format!("{}/{}", data_dir, node_id),
+			log_dir_path: None,
+			network: Network::Regtest,
+			listening_addresses: Some(listen_addr_list),
+			node_alias: Some(node_alias),
+			sending_parameters: None,
+			trusted_peers_0conf: Vec::new(),
+			probing_liquidity_limit_multiplier: 0,
+			log_level: LogLevel::Debug,
+			anchor_channels_config: None
+		};
+
+		// Build the ldk node
+		let mut builder = Builder::from_config(config);
+		builder.set_chain_source_bitcoind_rpc(String::from("127.0.0.1"), 18443, String::from("user"), String::from("pass"));
+		builder.set_gossip_source_p2p();
+		let ldknode = match builder.build() {
+			Ok(n) => n,
+			Err(e) => {
+				return Err(Status::new(Code::Unknown, format!("Could not create the ldk node: {:?}", e)));
+			}
+		};
+		let node = Arc::new(ldknode);
+
+		// Start the node
+		match node.start_with_runtime(Arc::clone(&self.runtime)) {
+			Ok(_) => {},
+			Err(_) => {
+				return Err(Status::new(Code::Unknown, "Could not start the ldk node."));
+			}
+		}
+
+		// Let the node get started up
+		thread::sleep(Duration::from_secs(2));
+
+		// TODO: Once and RPC is added to LDK-node, fill in the config for that connection here so that SimLn will be able to connect and generate payments
+		let n = SimLnNode{id: node_id.clone(), address: rpcaddr, macaroon: String::from(""), cert: String::from("")};
+
+		Ok((n, node))
 	}
 }
 
@@ -176,87 +292,22 @@ impl BlastRpc for BlastLdkServer {
 	/// Start a certain number of nodes
 	async fn start_nodes(&self, request: Request<BlastStartRequest>) -> Result<Response<BlastStartResponse>,Status> {
 		let num_nodes = request.get_ref().num_nodes;
-		let mut node_list = SimJsonFile{nodes: Vec::new()};
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str(DATA_DIR);
 
 		// Start the requested number of ldk nodes
 		for i in 0..num_nodes {
 			// Create a node id and alias
 			let node_id = format!("{}{:04}", "blast_ldk-", i);
-			let alias = node_id.as_bytes();
-			let mut alias_array = [0u8; 32];
-			let len = alias.len().min(alias_array.len());
-			alias_array[..len].copy_from_slice(alias);
-			let node_alias = NodeAlias(alias_array);
+			let port = self.get_available_port(8000, 9000)?;
+			let rpcport = self.get_available_port(port+1, 9000)?.to_string();
 
-			// Set up the listening address for this node
-			let mut listen_addr_list: Vec<SocketAddress> = Vec::new();
-			let port = self.get_available_port().unwrap();
-			let addr = format!("127.0.0.1:{}", port);
-			let address = match SocketAddress::from_str(&addr) {
-				Ok(a) => a,
-				Err(_) => {
-					return Err(Status::new(Code::InvalidArgument, "Could not create listen address."));
-				}
-			};
-			listen_addr_list.push(address);
-
-			// Create the config for this node
-			let config = Config {
-				storage_dir_path: format!("{}{}", data_dir, node_id),
-				log_dir_path: None,
-				network: Network::Regtest,
-				listening_addresses: Some(listen_addr_list),
-				node_alias: Some(node_alias),
-				sending_parameters: None,
-				trusted_peers_0conf: Vec::new(),
-				probing_liquidity_limit_multiplier: 0,
-				log_level: LogLevel::Debug,
-				anchor_channels_config: None
-			};
-
-			// Build the ldk node
-			let mut builder = Builder::from_config(config);
-			builder.set_chain_source_bitcoind_rpc(String::from("127.0.0.1"), 18443, String::from("user"), String::from("pass"));
-			builder.set_gossip_source_p2p();
-			let ldknode = match builder.build() {
-				Ok(n) => n,
-				Err(_) => {
-					return Err(Status::new(Code::Unknown, "Could not create the ldk node."));
-				}
-			};
-			let node = Arc::new(ldknode);
-
-			// Start the node
-			match node.start_with_runtime(Arc::clone(&self.runtime)) {
-				Ok(_) => {},
-				Err(_) => {
-					return Err(Status::new(Code::Unknown, "Could not start the ldk node."));
-				}
-			}
-
-			// Let the node get started up
-			thread::sleep(Duration::from_secs(2));
+			let (n,node) = self.start_node(node_id.clone(), port.to_string().clone(), rpcport.clone()).await?;
 
 			// Add the node to the model's list of nodes and to the SimLn data list
 			let mut bldk = self.blast_ldk.lock().await;
 			bldk.nodes.insert(node_id.clone(), node.clone());
-			// TODO: Once and RPC is added to LDK-node, fill in the config for that connection here so that SimLn will be able to connect and generate payments
-			let n = SimLnNode{id: node_id.clone(), address: String::from(""), macaroon: String::from(""), cert: String::from("")};
-			node_list.nodes.push(n);
+			bldk.ldk_data.simln_data.nodes.push(n);
+			bldk.ldk_data.ports.insert(node_id.clone(), (port.to_string().clone(), rpcport.clone()));
 		}
-
-		// Serialize the SimLn data into a json string
-		let mut bldk = self.blast_ldk.lock().await;
-		bldk.simln_data = match serde_json::to_string(&node_list) {
-			Ok(s) => s,
-			Err(_) => {
-				let start_response = BlastStartResponse { success: false };
-				let response = Response::new(start_response);
-				return Ok(response);
-			}
-		};
 
 		// Return the response to start_nodes
 		let start_response = BlastStartResponse { success: true };
@@ -266,8 +317,18 @@ impl BlastRpc for BlastLdkServer {
 
 	/// Get the sim-ln data for this model
 	async fn get_sim_ln(&self, _request: Request<BlastSimlnRequest>) -> Result<Response<BlastSimlnResponse>, Status> {
+		// Serialize the SimLn data into a json string
 		let bldk = self.blast_ldk.lock().await;
-		let simln_response = BlastSimlnResponse { simln_data: bldk.simln_data.clone().into() };
+		let data = match serde_json::to_string(&bldk.ldk_data.simln_data) {
+			Ok(s) => s,
+			Err(_) => {
+				let simln_response = BlastSimlnResponse { simln_data: String::from("").into() };
+				let response = Response::new(simln_response);
+				return Ok(response);
+			}
+		};
+
+		let simln_response = BlastSimlnResponse { simln_data: data.clone().into() };
 		let response = Response::new(simln_response);
 		Ok(response)
 	}
@@ -340,8 +401,13 @@ impl BlastRpc for BlastLdkServer {
 		let node_id = &req.node;
 		let node = self.get_node(node_id.to_string()).await?;
 
+		let peer = match hex::decode(&req.peer_pub_key) {
+			Ok(p) => { p }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
+		};
+
 		// Get the peer public key from the request and convert it to a PublicKey object
-		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
@@ -373,7 +439,7 @@ impl BlastRpc for BlastLdkServer {
 
 		// Add the channel to the model's list of open channels
 		let mut bldk = self.blast_ldk.lock().await;
-		bldk.open_channels.insert(id, Channel{source: node_id.to_string(), id: chan_id, pk: peer_pub});
+		bldk.ldk_data.open_channels.insert(id, Channel{source: node_id.to_string(), id: chan_id, pk: peer_pub});
 
 		// Respond to the open channel request
 		let chan_response = BlastOpenChannelResponse { success: true };
@@ -392,7 +458,7 @@ impl BlastRpc for BlastLdkServer {
 		// Get the channel from the model's open channel map
 		let id = req.channel_id;
 		let mut bldk = self.blast_ldk.lock().await;
-		let channel = match bldk.open_channels.get(&id) {
+		let channel = match bldk.ldk_data.open_channels.get(&id) {
 			Some(c) => c,
 			None => {
 				return Err(Status::new(Code::Unknown, format!("Could not find the channel.")));
@@ -408,7 +474,7 @@ impl BlastRpc for BlastLdkServer {
 		}
 
 		// Remove the channel from the model's list of open channels
-		bldk.open_channels.remove(&id);
+		bldk.ldk_data.open_channels.remove(&id);
 
 		// Respond to the close channel request
 		let chan_response = BlastCloseChannelResponse { success: true };
@@ -420,7 +486,7 @@ impl BlastRpc for BlastLdkServer {
 	async fn get_model_channels(&self, _request: Request<BlastGetModelChannelsRequest>) -> Result<Response<BlastGetModelChannelsResponse>, Status> {
 		let mut result = String::new();
 		let bldk = self.blast_ldk.lock().await;
-		for (key, value) in &bldk.open_channels {
+		for (key, value) in &bldk.ldk_data.open_channels {
 			result.push_str(&format!("{}: {} -> {},", key, &value.source, value.pk.to_string()));
 		}
 
@@ -435,8 +501,13 @@ impl BlastRpc for BlastLdkServer {
 	async fn connect_peer(&self, request: Request<BlastConnectRequest>) -> Result<Response<BlastConnectResponse>, Status> {
 		let req = &request.get_ref();
 
+		let peer = match hex::decode(&req.peer_pub_key) {
+			Ok(p) => { p }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
+		};
+
 		// Get the peer public key from the request and convert it to a PublicKey object
-		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
@@ -474,8 +545,13 @@ impl BlastRpc for BlastLdkServer {
 	async fn disconnect_peer(&self, request: Request<BlastDisconnectRequest>) -> Result<Response<BlastDisconnectResponse>, Status> {
 		let req = &request.get_ref();
 
+		let peer = match hex::decode(&req.peer_pub_key) {
+			Ok(p) => { p }
+			Err(_) => return Err(Status::new(Code::Unknown, "Could not decode the peer pub key.")),
+		};
+
 		// Get the peer public key from the request and convert it to a PublicKey object
-		let peer_pub = match PublicKey::from_slice(hex::decode(&req.peer_pub_key).unwrap().as_slice()) {
+		let peer_pub = match PublicKey::from_slice(peer.as_slice()) {
 			Ok(k) => k,
 			Err(_) => {
 				return Err(Status::new(Code::InvalidArgument, format!("Could not parse peer pub key: {:?}", req.peer_pub_key)));
@@ -528,7 +604,16 @@ impl BlastRpc for BlastLdkServer {
 			}
 		};
 
-		let listen_response = BlastListenAddressResponse { address: addr.clone().get(0).unwrap().clone().to_string() };
+		let a = match addr.get(0) {
+			Some(a) => a,
+			None => {
+				return Err(Status::new(Code::Unknown, "Could not get listening address."));
+			}
+		};
+
+		log::info!("------------------------ {}", a.clone().to_string());
+
+		let listen_response = BlastListenAddressResponse { address: a.clone().to_string() };
 		let response = Response::new(listen_response);
 		Ok(response)
 	}
@@ -537,12 +622,15 @@ impl BlastRpc for BlastLdkServer {
 	async fn stop_model(&self, _request: Request<BlastStopModelRequest>) -> Result<Response<BlastStopModelResponse>, Status> {
 		let mut bldk = self.blast_ldk.lock().await;
 		for (_, node) in &bldk.nodes {
-			node.stop().unwrap();
+			match node.stop() {
+				Ok(_) => {},
+				Err(_) => {},
+			}
 		}
 		let _ = bldk.shutdown_sender.take().unwrap().send(());
 
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str("/blast_data/");
+		let home = self.get_home()?;
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let _ = fs::remove_dir_all(data_dir);
 
 		let stop_response = BlastStopModelResponse { success: true };
@@ -554,28 +642,26 @@ impl BlastRpc for BlastLdkServer {
 	async fn load(&self, request: Request<BlastLoadRequest>) -> Result<Response<BlastLoadResponse>, Status> {
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
-		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let home_dir = self.get_home()?;
 		let sim_dir = String::from(SIM_DIR);
-		let sim_model_dir = format!("{}{}{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
-		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Open the .tar.gz file
 		let tar_gz = File::open(archive_path)?;
 		let decompressor = GzDecoder::new(tar_gz);
 		let mut archive = Archive::new(decompressor);
 		// Extract the archive into the specified directory
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str(DATA_DIR);
+		let home = self.get_home()?;
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		let data_path = Path::new(&data_dir);
 		fs::create_dir_all(data_path).unwrap();
 		archive.unpack(data_path).unwrap();
 
-
 		// Count the number of nodes to start and remove the old symlink
-		let mut count = 0;
         for entry in fs::read_dir(data_path).unwrap() {
             let entry = match entry {
 				Ok(e) => e,
@@ -589,8 +675,6 @@ impl BlastRpc for BlastLdkServer {
             if path.is_dir() {
                 if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
                     if dir_name.starts_with("blast_ldk-") {
-                        count += 1;
-
                         // Construct the path to the file to remove
                         let file_path = path.join("logs/ldk_node_latest.log");
 
@@ -605,46 +689,29 @@ impl BlastRpc for BlastLdkServer {
                 }
             }
         }
-		
-		// Attempt to start the nodes
-		let request = BlastStartRequest { num_nodes: count };
-		let start_req = Request::new(request);
-		match self.start_nodes(start_req).await {
-			Ok(_) => {},
-			Err(_) => {
-				return Err(Status::new(Code::Unknown, "Could not start nodes."));
-			}
-		}
 
-		// Open the JSON file
 		let file = File::open(json_path).unwrap();
 		let reader = BufReader::new(file);
+		let data: BlastLdkData = serde_json::from_reader(reader).unwrap();
 
-		// Deserialize JSON to Channel map
-		let chans: HashMap<i64, Channel> = serde_json::from_reader(reader).unwrap();
-		let mut bldk = self.blast_ldk.lock().await;
-		bldk.open_channels = chans;
-
-		let load_response = BlastLoadResponse { success: true };
-		let response = Response::new(load_response);
-		Ok(response)
+		Ok(self.load_nodes(data).await?)
 	}
 
 	/// Save this models current state
 	async fn save(&self, request: Request<BlastSaveRequest>) -> Result<Response<BlastSaveResponse>, Status> {
 		let req = &request.get_ref();
 		let sim_name = &req.sim;
-		let home_dir = env::var("HOME").expect("HOME environment variable not set");
+		let home_dir = self.get_home()?;
 		let sim_dir = String::from(SIM_DIR);
-		let sim_model_dir = format!("{}{}{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
+		let sim_model_dir = format!("{}/{}/{}/{}/", home_dir, sim_dir, sim_name, MODEL_NAME);
 
 		// Set paths for the archive and JSON file
 		let archive_path = Path::new(&sim_model_dir).join(format!("{}.tar.gz", sim_name));
-		let json_path = Path::new(&sim_model_dir).join(format!("{}_channels.json", sim_name));
+		let json_path = Path::new(&sim_model_dir).join(format!("{}_data.json", sim_name));
 
 		// Create the .tar.gz archive
-		let mut data_dir = env!("CARGO_MANIFEST_DIR").to_owned();
-        data_dir.push_str("/blast_data/");
+		let home = self.get_home()?;
+		let data_dir = PathBuf::from(home).join(DATA_DIR).display().to_string();
 		if let Some(parent) = archive_path.parent() {
 			fs::create_dir_all(parent).unwrap();
 		}
@@ -655,7 +722,7 @@ impl BlastRpc for BlastLdkServer {
 
 		// Serialize the HashMap to JSON and write to a file
 		let bldk = self.blast_ldk.lock().await;
-		let json_string = serde_json::to_string_pretty(&bldk.open_channels).unwrap();
+		let json_string = serde_json::to_string_pretty(&bldk.ldk_data).unwrap();
 		fs::write(&json_path, json_string)?;
 
 		let save_response = BlastSaveResponse { success: true };
@@ -682,7 +749,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	.unwrap());
 
 	// Create the BlastLdkServer object
-    let addr = "127.0.0.1:5051".parse()?;
+    let addr = RPC_ADDR.parse()?;
 	let (shutdown_sender, shutdown_receiver) = oneshot::channel::<()>();
 	let mut bldk = BlastLdk::new();
 	bldk.shutdown_sender = Some(shutdown_sender);

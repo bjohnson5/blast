@@ -17,7 +17,6 @@ use std::env;
 // Extra dependencies
 use bitcoincore_rpc::Auth;
 use bitcoincore_rpc::RpcApi;
-use anyhow::Error;
 use bitcoincore_rpc::Client;
 use tokio::task::JoinSet;
 use tokio::sync::mpsc;
@@ -171,7 +170,7 @@ impl Blast {
     }
 
     /// Start the simulation -- this will start the simulation events and the simln transaction generation
-    pub async fn start_simulation(&mut self) -> Result<JoinSet<Result<(),Error>>, String> {
+    pub async fn start_simulation(&mut self) -> Result<JoinSet<()>, String> {
         let net = match &self.network {
             Some(n) => n,
             None => return Err(format!("No network found")),
@@ -190,17 +189,32 @@ impl Blast {
 
         // Start the simln thread
         sim_tasks.spawn(async move {
-            simln_man.start().await
+            match simln_man.start().await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error running simln: {:?}", e);
+                }
+            };
         });
 
         // Start the event thread
         sim_tasks.spawn(async move {
-            event_man.start(sender).await
+            match event_man.start(sender).await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error running event thread: {:?}", e);
+                }
+            };
         });
 
         // Start the model manager thread
         sim_tasks.spawn(async move {
-            model_man.process_events(receiver).await
+            match model_man.process_events(receiver).await {
+                Ok(_) => {},
+                Err(e) => {
+                    log::error!("Error running model thread: {:?}", e);
+                }
+            };
         });
 
         Ok(sim_tasks)
@@ -539,12 +553,18 @@ impl Blast {
     }
 
     /// Send funds to a node on-chain and optionally mines blocks to confirm that payment
-    pub async fn fund_node(&mut self, node_id: String, confirm: bool) -> Result<String, String> {
+    pub async fn fund_node(&mut self, node_id: String, amt_btc: f64, confirm: bool) -> Result<String, String> {
         match self.blast_model_manager.get_btc_address(node_id).await {
             Ok(a) => {
                 let address = bitcoincore_rpc::bitcoin::Address::from_str(&a).map_err(|e|e.to_string())?
                 .require_network(bitcoincore_rpc::bitcoin::Network::Regtest).map_err(|e|e.to_string())?;
-                let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, bitcoincore_rpc::bitcoin::Amount::ONE_BTC, None, None, None, None, None, None)
+                let amt = match bitcoincore_rpc::bitcoin::Amount::from_btc(amt_btc) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return Err(format!("Error getting funding amount: {}", e));
+                    }
+                };
+                let txid = self.bitcoin_rpc.as_mut().unwrap().send_to_address(&address, amt, None, None, None, None, None, None)
                 .map_err(|e| e.to_string())?;
 
                 if confirm {

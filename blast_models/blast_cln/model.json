@@ -1,3 +1,5 @@
 {
-    "name": "blast_cln"
+    "name": "blast_cln",
+    "rpc": "localhost:5052",
+    "start": "blast_cln/target/debug/blast_cln"
 }

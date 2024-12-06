@@ -55,7 +55,7 @@ impl BlastTab for RunTab {
             "Press ".into(),
             "s".bold(),
             " to stop sim, ".into(),
-            "Tab".bold(),
+            "tab".bold(),
             " to change sections".into()
         ];
         let text = Text::from(Line::from(msg)).patch_style(Style::default());

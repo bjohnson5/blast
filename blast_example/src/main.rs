@@ -163,14 +163,14 @@ async fn new_simulation() {
 
     println!("----------------------------------------------- FUND / CONNECT NODES -----------------------------------------------");
 
-    match blast.fund_node(String::from("blast_lnd-0000"), true).await {
+    match blast.fund_node(String::from("blast_lnd-0000"), 1.0, true).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to fund node: {}", e));
         }
     }
 
-    match blast.fund_node(String::from("blast_lnd-0001"), true).await {
+    match blast.fund_node(String::from("blast_lnd-0001"), 1.0, true).await {
         Ok(_) => {},
         Err(e) => {
             println!("{}", format!("Unable to fund node: {}", e));
