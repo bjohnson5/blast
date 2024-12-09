@@ -47,7 +47,7 @@ pub const BITCOIND_PASS: &str = "pass";
 pub const BLAST_SIM_DIR: &str = ".blast/blast_sims";
 
 /// TODO: make this configurable
-pub const TOTAL_FRAMES: u64 = 40;
+pub const TOTAL_FRAMES: u64 = 60;
 
 /// The Blast struct is the main public interface that can be used to run a simulation.
 pub struct Blast {
