@@ -27,15 +27,25 @@ async fn main() {
     .init()
     .unwrap();
 
+    // Get the model directory
+    let mut current_dir = match env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            return println!("Failed to get the current directory: {:?}", e);
+        }
+    };
+    current_dir.push("../blast_models/");
+    let model_dir = current_dir.to_string_lossy().into_owned();
+
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
-        load_simulation(args[1].clone()).await;
+        load_simulation(args[1].clone(), model_dir).await;
     } else {
-        new_simulation().await;
+        new_simulation(model_dir).await;
     }
 }
 
-async fn new_simulation() {
+async fn new_simulation(model_dir: String) {
     println!("BLAST starting up...");
 
     // Set up a Ctrl+C signal handler
@@ -46,7 +56,7 @@ async fn new_simulation() {
     }).expect("Error setting Ctrl-C handler");
 
     // Create the blast core object
-    let mut blast = Blast::new();
+    let mut blast = Blast::new(model_dir);
 
     // Control Flow:
     // create_network -- starts models and nodes OR load network
@@ -511,7 +521,7 @@ async fn new_simulation() {
     println!("BLAST shutting down...");
 }
 
-async fn load_simulation(name: String) {
+async fn load_simulation(name: String, model_dir: String) {
     println!("BLAST starting up...");
 
     // Set up a Ctrl+C signal handler
@@ -522,7 +532,7 @@ async fn load_simulation(name: String) {
     }).expect("Error setting Ctrl-C handler");
 
     // Create the blast core object
-    let mut blast = Blast::new();
+    let mut blast = Blast::new(model_dir);
 
     // Load a previously saved simulation
 

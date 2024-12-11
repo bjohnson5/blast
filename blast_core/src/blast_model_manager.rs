@@ -49,14 +49,16 @@ struct BlastModel {
 /// The BlastModelManager struct is the public interface that allows models to be controlled
 #[derive(Clone)]
 pub struct BlastModelManager {
+    model_dir: String,
     models: HashMap<String, BlastModel>
 }
 
 impl BlastModelManager {
     /// Create a new BlastModelManager by searching the models directory and parsing all model.json files that are found
-    pub fn new() -> Self {
+    pub fn new(model_dir: String) -> Self {
         let blast_model_manager = BlastModelManager {
-            models: parse_models(),
+            model_dir: model_dir.clone(),
+            models: parse_models(model_dir),
         };
 
         blast_model_manager
@@ -115,18 +117,7 @@ impl BlastModelManager {
             }
         };
 
-        // Get the current working directory
-        let mut current_dir = match env::current_dir() {
-            Ok(d) => d,
-            Err(e) => {
-                return Err(format!("Failed to get the current directory: {:?}", e));
-            }
-        };
-
-        // Get the full path to the model executable
-        current_dir.push("../blast_models/".to_owned()+&model.config.name+"/"+&model.config.start);
-        let model_exe = current_dir.to_string_lossy().into_owned();
-
+        let model_exe = self.model_dir.to_owned()+"/"+&model.config.name+"/"+&model.config.start;
         let home = env::var("HOME").expect("HOME environment variable not set");
         let folder_path = PathBuf::from(home).join(BLAST_MODEL_LOG_DIR);
 
@@ -449,6 +440,13 @@ impl BlastModelManager {
             }
         }
 
+        // Sort the Vec of Strings by the first character interpreted as an integer
+        chans.sort_by(|a, b| {
+            let first_char_a = String::from(a.split(":").next().unwrap()).parse().unwrap_or(0);
+            let first_char_b = String::from(b.split(":").next().unwrap()).parse().unwrap_or(0);
+            first_char_a.cmp(&first_char_b)
+        });
+
         chans
     }
 
@@ -661,19 +659,12 @@ fn get_model_from_node(node_id: String) -> String {
 }
 
 /// Check for model.json files and create BlastModel objects for all known models
-fn parse_models() -> HashMap<String, BlastModel> {
+fn parse_models(dir: String) -> HashMap<String, BlastModel> {
     // Create a new map of all the models that are found and then get the models directory.
     let mut model_map = HashMap::new();
-    let mut current_dir = match env::current_dir() {
-        Ok(d) => d,
-        Err(_) => {
-            return model_map;
-        }
-    };
-    current_dir.push("../blast_models/");
 
     // Search for model.json files in the models directory
-    check_for_model(&current_dir.as_path(), 0, &mut model_map);
+    check_for_model(&Path::new(&dir), 0, &mut model_map);
 
     model_map
 }

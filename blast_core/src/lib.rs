@@ -75,10 +75,10 @@ pub struct BlastStats {
 
 impl Blast {
     /// Create a new Blast object with a new BlastModelManager.
-    pub fn new() -> Self {
+    pub fn new(model_dir: String) -> Self {
         // Create the blast object
         let blast = Blast {
-            blast_model_manager: BlastModelManager::new(),
+            blast_model_manager: BlastModelManager::new(model_dir),
             blast_event_manager: BlastEventManager::new(),
             blast_simln_manager: BlastSimLnManager::new(),
             network: None,
