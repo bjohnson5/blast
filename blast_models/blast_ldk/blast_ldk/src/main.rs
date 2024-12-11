@@ -236,7 +236,7 @@ impl BlastLdkServer {
 		// Set up the listening address for this node
 		let mut listen_addr_list: Vec<SocketAddress> = Vec::new();
 		let addr = format!("127.0.0.1:{}", port);
-		let rpcaddr = format!("127.0.0.1:{}", rpcport);
+		let _rpcaddr = format!("127.0.0.1:{}", rpcport);
 		let address = match SocketAddress::from_str(&addr) {
 			Ok(a) => a,
 			Err(_) => {
@@ -283,7 +283,7 @@ impl BlastLdkServer {
 		thread::sleep(Duration::from_secs(2));
 
 		// TODO: Once and RPC is added to LDK-node, fill in the config for that connection here so that SimLn will be able to connect and generate payments
-		let n = SimLnNode{id: node_id.clone(), address: rpcaddr, macaroon: String::from(""), cert: String::from("")};
+		let n = SimLnNode{id: node_id.clone(), address: String::from(""), macaroon: String::from(""), cert: String::from("")};
 
 		Ok((n, node))
 	}

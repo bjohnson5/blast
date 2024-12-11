@@ -471,7 +471,7 @@ func create_shutdown_listener() (signal.Interceptor, error) {
 func save_port(port string) {
 	listener, err := net.Listen("tcp", "localhost:"+port)
 	if err != nil {
-		fmt.Println("Error starting TCP server:", err)
+		BlastLndLog("Error starting TCP server: " + err.Error())
 		return
 	}
 
@@ -482,7 +482,7 @@ func save_port(port string) {
 func free_port(port string) {
 	listener := *saved_ports[port]
 	if err := listener.Close(); err != nil {
-		fmt.Println("Error closing the listener:", err)
+		BlastLndLog("Error closing the listener: " + err.Error())
 	}
 }
 
