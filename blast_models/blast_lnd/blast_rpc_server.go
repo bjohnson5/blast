@@ -197,6 +197,7 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 					if err != nil {
 						return
 					}
+					s.blast_lnd.lock.Lock()
 
 					switch rpcUpdate.Update.(type) {
 					case *lnrpc.OpenStatusUpdate_ChanPending:
@@ -205,6 +206,8 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 						return
 					case *lnrpc.OpenStatusUpdate_PsbtFund:
 					}
+
+					s.blast_lnd.lock.Unlock()
 				}
 			}()
 		}

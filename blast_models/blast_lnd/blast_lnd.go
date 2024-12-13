@@ -102,6 +102,7 @@ type BlastLnd struct {
 	home_dir         string
 	data_dir         string
 	open_channels    map[string]ChannelPoint
+	lock             sync.Mutex
 	wg               *sync.WaitGroup
 }
 
@@ -210,13 +211,13 @@ func (blnd *BlastLnd) start_nodes(num_nodes int) error {
 
 		// After starting 10 nodes, wait some time to let the nodes get up and running
 		if i%10 == 0 {
-			time.Sleep(10 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}
 
 	// After starting all of the nodes, attempt to connect the model to each running lnd node
 	blnd.connect_to_nodes(node_list.Nodes)
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// After successfully connecting to all nodes, create the sim-ln data for all the running nodes
 	err = blnd.create_sim_ln_data(node_list, blnd.data_dir+"/sim.json")

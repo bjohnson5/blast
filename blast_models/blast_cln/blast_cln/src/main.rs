@@ -420,7 +420,7 @@ impl BlastRpc for BlastClnServer {
 
 		let node_id = &request.get_ref().node;
 		let mut node = self.get_node(node_id.to_string()).await?;
-		let cln_resp = match node.list_channels(ListchannelsRequest{short_channel_id: None, source: None, destination: None}).await {
+		let cln_resp = match node.list_peer_channels(ListpeerchannelsRequest{id: None}).await {
 			Ok(r) => {
 				r.into_inner()
 			},
@@ -433,11 +433,9 @@ impl BlastRpc for BlastClnServer {
 
 		let mut result = String::new();
 		for c in cln_resp.channels {
-			if c.direction == 1 {
-				if let Some(amount) = c.amount_msat {
-					result.push_str(&format!("Peer: {}, Amount: {}", hex::encode(c.destination), amount.msat / 1000));
-					result.push('\n');
-				}
+			if let Some(amount) = c.total_msat {
+				result.push_str(&format!("Peer: {}, Amount: {}", hex::encode(c.peer_id), amount.msat / 1000));
+				result.push('\n');
 			}
 		}
 
