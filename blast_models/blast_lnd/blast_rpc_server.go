@@ -203,7 +203,6 @@ func (s *BlastRpcServer) OpenChannel(ctx context.Context, request *pb.BlastOpenC
 					case *lnrpc.OpenStatusUpdate_ChanPending:
 					case *lnrpc.OpenStatusUpdate_ChanOpen:
 						s.blast_lnd.open_channels[strconv.Itoa(int(request.ChannelId))] = ChannelPoint{Source: request.Node, Dest: request.PeerPubKey, FundingTxid: rpcUpdate.GetChanOpen().ChannelPoint.GetFundingTxidBytes(), OutputIndex: rpcUpdate.GetChanOpen().ChannelPoint.OutputIndex}
-						return
 					case *lnrpc.OpenStatusUpdate_PsbtFund:
 					}
 
