@@ -1,3 +1,7 @@
+// Standard libraries
+use std::env;
+use std::path::PathBuf;
+
 // Blast libraries
 use blast_core::Blast;
 
@@ -18,8 +22,18 @@ pub struct BlastCli {
 
 impl BlastCli {
     pub fn new() -> Self {
+        // Get the model directory
+        let mut current_dir = match env::current_dir() {
+            Ok(d) => d,
+            Err(_) => {
+                PathBuf::new()
+            }
+        };
+        current_dir.push("../blast_models/");
+        let model_dir = current_dir.to_string_lossy().into_owned();
+
         // Create the blast core object
-        let blast = Blast::new();
+        let blast = Blast::new(model_dir);
 
         // Get a list of the available models
         let mut model_list: Vec<Model> = Vec::new();

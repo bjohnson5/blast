@@ -50,7 +50,7 @@ impl BlastTab for LoadTab {
         .iter()
         .map(|i| ListItem::new(vec![text::Line::from(Span::raw(i.clone()))]))
         .collect();
-        
+
         let tasks = List::new(tasks)
         .block(Block::bordered().title("Simulations"))
         .highlight_style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD))
