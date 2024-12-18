@@ -210,21 +210,21 @@ impl BlastClnServer {
 		};
 
 		// Let the node get started up
-		thread::sleep(Duration::from_secs(2));
+		thread::sleep(Duration::from_secs(20));
 
 		// Load the certificates
 		let ca_cert = match fs::read(ca_path.clone()) {
 			Ok(c) => { c }
-			Err(_) => return Err(Status::new(Code::Unknown, "Could not read the ca path.")),
+			Err(_) => return Err(Status::new(Code::Unknown, format!("Could not read the ca path: {}", ca_path))),
 		};
 		let ca_certificate = Certificate::from_pem(ca_cert);
 		let client_cert = match fs::read(client_path.clone()) {
 			Ok(c) => { c }
-			Err(_) => return Err(Status::new(Code::Unknown, "Could not read the client path.")),
+			Err(_) => return Err(Status::new(Code::Unknown, format!("Could not read the client path: {}", client_path))),
 		};
 		let client_key_cert = match fs::read(client_key_path.clone()) {
 			Ok(c) => { c }
-			Err(_) => return Err(Status::new(Code::Unknown, "Could not read the client key.")),
+			Err(_) => return Err(Status::new(Code::Unknown, format!("Could not read the client key path: {}", client_key_path))),
 		};
 		let id = tonic::transport::Identity::from_pem(client_cert, client_key_cert);
 
