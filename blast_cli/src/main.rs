@@ -228,7 +228,7 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, mut blast_cli: BlastCli) ->
                                         Err(e) => {
                                             failed = true;
                                             error_str = e;
-                                        }        
+                                        }
                                     }
 
                                     // Start the simulation
@@ -375,7 +375,7 @@ fn ui(frame: &mut Frame, tab: &mut dyn BlastTab, error: Option<String>) {
             .block(Block::bordered().title("Error"));
             let area = centered_rect(60, 20, chunks[1]);
             frame.render_widget(Clear, area);
-            frame.render_widget(error_msg, area);            
+            frame.render_widget(error_msg, area);
         },
         None => {
             // Draw the current page
@@ -572,7 +572,7 @@ async fn run_command(blast: &mut blast_core::Blast, cmd: String) -> Vec<String> 
                         let msg = format!("Unable to open channel: {}", e);
                         output.push(msg);
                     }
-                }                
+                }
             },
             "connect_peer" => {
                 let source = String::from(words.next().unwrap_or(""));

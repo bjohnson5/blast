@@ -14,12 +14,15 @@ use anyhow::Error;
 use tokio::sync::mpsc::Sender;
 use serde::{Serialize, Deserialize};
 
+// TODO: Make this configurable
 /// The number of seconds to wait in between checking for events
 pub const FRAME_RATE: u64 = 1;
 
+// TODO: Make this configurable (might be useful to make it zero if you do not want new blocks during the sim)
 /// The number of seconds in between mining events
 pub const MINE_RATE: u64 = 5;
 
+// TODO: Make this configurable (might be useful to make it zero if you do not want new blocks during the sim)
 /// The number of blocks to mine for each mining event
 pub const BLOCKS_PER_MINE: u64 = 10;
 
@@ -86,7 +89,7 @@ impl BlastEventManager {
             log::info!("BlastEventManager running frame number {}", frame);
 
             // If it is time to mine new bocks, use the bitcoind RPC client to generate new blocks
-            if frame % MINE_RATE == 0 {
+            if MINE_RATE != 0 && BLOCKS_PER_MINE != 0 && frame % MINE_RATE == 0 {
                 match crate::mine_blocks(&mut self.bitcoin_rpc, BLOCKS_PER_MINE) {
                     Ok(_) => {},
                     Err(e) => return Err(anyhow::Error::msg(e)),
@@ -195,7 +198,7 @@ impl BlastEventManager {
                         Ok(n) => n,
                         Err(e) => return Err(format!("Error parsing argument: {}", e))
                     };
-    
+
                     let blast_event = BlastEvent::CloseChannelEvent(arg0, arg1);
                     self.push_event(frame_num, blast_event);
                     Ok(())
@@ -208,7 +211,7 @@ impl BlastEventManager {
                         Ok(n) => n,
                         Err(e) => return Err(format!("Error parsing argument: {}", e))
                     };
-    
+
                     let blast_event = BlastEvent::OnChainTransaction(arg0, arg1, arg2);
                     self.push_event(frame_num, blast_event);
                     Ok(())
