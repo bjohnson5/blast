@@ -19,7 +19,7 @@ else
     git checkout v24.11rc3
     ./configure
     make
-
+    deactivate
     echo "Download and extraction complete."
     cd -
 fi
