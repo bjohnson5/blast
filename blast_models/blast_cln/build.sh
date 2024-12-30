@@ -13,10 +13,10 @@ if [ -f "$LIGHTNINGD_FILE" ]; then
 else
     echo "'lightningd' file not found. Downloading and extracting..."
 
+    source ~/.venv/bin/activate
     git clone "$DOWNLOAD_URL" "$TARGET_DIR"
     cd "$TARGET_DIR"
     git checkout v24.11rc3
-
     ./configure
     make
 
