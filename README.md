@@ -39,6 +39,15 @@ BLAST development will all take place in this repository and will be broken down
 - `research` - Data collected during LN implementation research
 
 # Build
+### Install utils
+```bash
+sudo apt update
+sudo apt-get install -y wget curl jq bc autoconf automake build-essential git libtool libsqlite3-dev python3 python3-pip python3-venv net-tools zlib1g-dev libsodium-dev gettext
+python3 -m venv ~/.venv
+~/.venv/bin/pip3 install mako
+~/.venv/bin/pip3 install grpcio-tools
+```
+
 ### Install bitcoind
 ```bash
 wget https://bitcoin.org/bin/bitcoin-core-25.0/bitcoin-25.0-x86_64-linux-gnu.tar.gz
@@ -46,17 +55,10 @@ tar xzf bitcoin-25.0-x86_64-linux-gnu.tar.gz
 sudo install -m 0755 -o root -g root -t /usr/local/bin bitcoin-25.0/bin/*
 ```
 
-### Install utils
-```bash
-sudo apt-get install -y jq bc autoconf automake build-essential git libtool libsqlite3-dev python3 python3-pip python3-venv net-tools zlib1g-dev libsodium-dev gettext
-python3 -m venv ~/.venv
-~/.venv/bin/pip3 install mako
-~/.venv/bin/pip3 install grpcio-tools
-```
-
 ### Install Rust
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+. "$HOME/.cargo/env"
 ```
 
 ### Install Go
