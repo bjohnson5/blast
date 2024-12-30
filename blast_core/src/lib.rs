@@ -47,7 +47,7 @@ pub const BITCOIND_PASS: &str = "pass";
 pub const BLAST_SIM_DIR: &str = ".blast/blast_sims";
 
 /// TODO: make this configurable
-pub const TOTAL_FRAMES: u64 = 40;
+pub const TOTAL_FRAMES: u64 = 60;
 
 /// The Blast struct is the main public interface that can be used to run a simulation.
 pub struct Blast {
@@ -75,10 +75,10 @@ pub struct BlastStats {
 
 impl Blast {
     /// Create a new Blast object with a new BlastModelManager.
-    pub fn new() -> Self {
+    pub fn new(model_dir: String) -> Self {
         // Create the blast object
         let blast = Blast {
-            blast_model_manager: BlastModelManager::new(),
+            blast_model_manager: BlastModelManager::new(model_dir),
             blast_event_manager: BlastEventManager::new(),
             blast_simln_manager: BlastSimLnManager::new(),
             network: None,
@@ -245,7 +245,7 @@ impl Blast {
         events_path.push_str("/");
         events_path.push_str("events.json");
         self.blast_event_manager.set_event_json(&events_path)?;
-  
+
         // Get simln
         let mut simln_path: String = folder_path.display().to_string();
         simln_path.push_str("/");
@@ -281,7 +281,7 @@ impl Blast {
             Ok(_) => {},
             Err(e) => return Err(format!("Could not load bitcoind: {}", e)),
         };
-        
+
         // Get network from models.json file
         let mut models_path: String = folder_path.display().to_string();
         models_path.push_str("/");
@@ -610,7 +610,7 @@ impl Blast {
     async fn stop_model(&mut self, model: String) -> Result<(), String>{
         self.blast_model_manager.stop_model(model).await
     }
-    
+
     /// Start a given number of nodes for the given model name
     async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<(), String> {
         match self.blast_model_manager.start_nodes(model, num_nodes).await {

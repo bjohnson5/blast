@@ -27,15 +27,25 @@ async fn main() {
     .init()
     .unwrap();
 
+    // Get the model directory
+    let mut current_dir = match env::current_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            return println!("Failed to get the current directory: {:?}", e);
+        }
+    };
+    current_dir.push("../blast_models/");
+    let model_dir = current_dir.to_string_lossy().into_owned();
+
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
-        load_simulation(args[1].clone()).await;
+        load_simulation(args[1].clone(), model_dir).await;
     } else {
-        new_simulation().await;
+        new_simulation(model_dir).await;
     }
 }
 
-async fn new_simulation() {
+async fn new_simulation(model_dir: String) {
     println!("BLAST starting up...");
 
     // Set up a Ctrl+C signal handler
@@ -46,7 +56,7 @@ async fn new_simulation() {
     }).expect("Error setting Ctrl-C handler");
 
     // Create the blast core object
-    let mut blast = Blast::new();
+    let mut blast = Blast::new(model_dir);
 
     // Control Flow:
     // create_network -- starts models and nodes OR load network
@@ -67,7 +77,7 @@ async fn new_simulation() {
     let models = match blast.create_network("test", m, running.clone()).await {
         Ok(m) => m,
         Err(e) => {
-            println!("{}", format!("Failed to start network: {}", e));
+            println!("Failed to start network: {}", e);
             return;
         }
     };
@@ -75,14 +85,14 @@ async fn new_simulation() {
     // Print information about the current network
 
     println!("----------------------------------------------- GET NETWORK INFO -----------------------------------------------");
-    
+
     for node_id in blast.get_nodes() {
         match blast.get_pub_key(node_id.clone()).await {
             Ok(s) => {
                 println!("PubKey Node {}: {}", node_id, s);
             },
             Err(e) => {
-                println!("{}", format!("Unable to get pub key: {}", e));
+                println!("Unable to get pub key: {}", e);
             }
         }
     }
@@ -92,7 +102,7 @@ async fn new_simulation() {
             println!("Peers Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -101,7 +111,7 @@ async fn new_simulation() {
             println!("Peers Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -110,7 +120,7 @@ async fn new_simulation() {
             println!("Wallet Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -119,7 +129,7 @@ async fn new_simulation() {
             println!("Wallet Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -128,7 +138,7 @@ async fn new_simulation() {
             println!("Channel Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -137,7 +147,7 @@ async fn new_simulation() {
             println!("Channel Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -146,7 +156,7 @@ async fn new_simulation() {
             println!("Channels Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -155,7 +165,7 @@ async fn new_simulation() {
             println!("Channels Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -166,21 +176,21 @@ async fn new_simulation() {
     match blast.fund_node(String::from("blast_lnd-0000"), 1.0, true).await {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Unable to fund node: {}", e));
+            println!("Unable to fund node: {}", e);
         }
     }
 
     match blast.fund_node(String::from("blast_lnd-0001"), 1.0, true).await {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Unable to fund node: {}", e));
+            println!("Unable to fund node: {}", e);
         }
     }
 
     match blast.connect_peer(String::from("blast_lnd-0000"), String::from("blast_lnd-0001")).await {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Unable to connect peers: {}", e));
+            println!("Unable to connect peers: {}", e);
         }
     }
 
@@ -189,7 +199,7 @@ async fn new_simulation() {
             println!("Peers Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -198,7 +208,7 @@ async fn new_simulation() {
             println!("Peers Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -207,7 +217,7 @@ async fn new_simulation() {
             println!("Wallet Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -216,7 +226,7 @@ async fn new_simulation() {
             println!("Wallet Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -225,7 +235,7 @@ async fn new_simulation() {
             println!("Channel Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -234,7 +244,7 @@ async fn new_simulation() {
             println!("Channel Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -245,7 +255,7 @@ async fn new_simulation() {
     match blast.open_channel(String::from("blast_lnd-0000"), String::from("blast_lnd-0001"), 30000, 0, 0, true).await {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Unable to open channel: {}", e));
+            println!("Unable to open channel: {}", e);
         }
     }
 
@@ -254,7 +264,7 @@ async fn new_simulation() {
             println!("Channels Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list channels: {}", e));
+            println!("Unable to list channels: {}", e);
         }
     }
 
@@ -263,7 +273,7 @@ async fn new_simulation() {
             println!("Channels Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list channels: {}", e));
+            println!("Unable to list channels: {}", e);
         }
     }
 
@@ -272,7 +282,7 @@ async fn new_simulation() {
             println!("Channel Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -281,7 +291,7 @@ async fn new_simulation() {
             println!("Channel Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -296,14 +306,14 @@ async fn new_simulation() {
     match blast.add_event(5, "StartNode", Some(good_start.clone())) {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
+            println!("Error adding event: {}", e);
         }
     }
 
     match blast.add_event(5, "StopNode", Some(good_start.clone())) {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
+            println!("Error adding event: {}", e);
         }
     }
 
@@ -313,7 +323,7 @@ async fn new_simulation() {
     match blast.add_event(10, "CloseChannel", Some(good_close.clone())) {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
+            println!("Error adding event: {}", e);
         }
     }
 
@@ -327,7 +337,7 @@ async fn new_simulation() {
     match blast.add_event(23, "OpenChannel", Some(good_open.clone())) {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Error adding event: {}", e));
+            println!("Error adding event: {}", e);
         }
     }
 
@@ -338,8 +348,8 @@ async fn new_simulation() {
     match blast.save("test1").await {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Error saving simulation: {}", e));
-        }        
+            println!("Error saving simulation: {}", e);
+        }
     }
 
     // Run the simulation
@@ -352,7 +362,7 @@ async fn new_simulation() {
         Err(e) => {
             println!("Failed to finalize the simulation: {:?}", e);
             return;
-        }        
+        }
     }
 
     // Start the simulation
@@ -395,13 +405,13 @@ async fn new_simulation() {
         match blast.connect_peer(String::from("blast_lnd-0000"), param.clone()).await {
             Ok(_) => {},
             Err(e) => {
-                println!("{}", format!("Unable to connect peers: {}", e));
+                println!("Unable to connect peers: {}", e);
             }
         }
         match blast.open_channel(String::from("blast_lnd-0000"), param.clone(), 30000, 0, i, true).await {
             Ok(_) => {},
             Err(e) => {
-                println!("{}", format!("Unable to open channel: {}", e));
+                println!("Unable to open channel: {}", e);
             }
         }
 
@@ -417,7 +427,7 @@ async fn new_simulation() {
             println!("Peers Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list peers: {}", e));
+            println!("Unable to list peers: {}", e);
         }
     }
 
@@ -426,15 +436,15 @@ async fn new_simulation() {
             println!("Channels Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list channels: {}", e));
+            println!("Unable to list channels: {}", e);
         }
     }
 
     match blast.save("test2").await {
         Ok(_) => {},
         Err(e) => {
-            println!("{}", format!("Error saving simulation: {}", e));
-        }        
+            println!("Error saving simulation: {}", e);
+        }
     }
 
     // Run the simulation again
@@ -447,7 +457,7 @@ async fn new_simulation() {
         Err(e) => {
             println!("Failed to finalize the simulation: {:?}", e);
             return;
-        }        
+        }
     }
 
     // Start the simulation
@@ -491,7 +501,7 @@ async fn new_simulation() {
     match blast.stop_network().await {
         Ok(_) => {},
         Err(e) => {
-            println!("Failed to stop the network: {:?}", e);       
+            println!("Failed to stop the network: {:?}", e);
         }
     }
 
@@ -511,7 +521,7 @@ async fn new_simulation() {
     println!("BLAST shutting down...");
 }
 
-async fn load_simulation(name: String) {
+async fn load_simulation(name: String, model_dir: String) {
     println!("BLAST starting up...");
 
     // Set up a Ctrl+C signal handler
@@ -522,7 +532,7 @@ async fn load_simulation(name: String) {
     }).expect("Error setting Ctrl-C handler");
 
     // Create the blast core object
-    let mut blast = Blast::new();
+    let mut blast = Blast::new(model_dir);
 
     // Load a previously saved simulation
 
@@ -531,11 +541,11 @@ async fn load_simulation(name: String) {
     let models = match blast.load(&name, running.clone()).await {
         Ok(m) => m,
         Err(e) => {
-            println!("{}", format!("Failed to start network: {}", e));
+            println!("Failed to start network: {}", e);
             match blast.stop_network().await {
                 Ok(_) => {},
                 Err(e) => {
-                    println!("Failed to stop the network: {:?}", e);       
+                    println!("Failed to stop the network: {:?}", e);
                 }
             }
             return
@@ -552,7 +562,7 @@ async fn load_simulation(name: String) {
                 println!("PubKey Node {}: {}", node_id, s);
             },
             Err(e) => {
-                println!("{}", format!("Unable to get pub key: {}", e));
+                println!("Unable to get pub key: {}", e);
             }
         }
     }
@@ -562,7 +572,7 @@ async fn load_simulation(name: String) {
             println!("Channels Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list channels: {}", e));
+            println!("Unable to list channels: {}", e);
         }
     }
 
@@ -571,7 +581,7 @@ async fn load_simulation(name: String) {
             println!("Channels Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to list channels: {}", e));
+            println!("Unable to list channels: {}", e);
         }
     }
 
@@ -580,7 +590,7 @@ async fn load_simulation(name: String) {
             println!("Wallet Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -589,7 +599,7 @@ async fn load_simulation(name: String) {
             println!("Wallet Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -598,7 +608,7 @@ async fn load_simulation(name: String) {
             println!("Channel Balance Node 0000: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -607,7 +617,7 @@ async fn load_simulation(name: String) {
             println!("Channel Balance Node 0001: {}", s);
         },
         Err(e) => {
-            println!("{}", format!("Unable to get wallet balance: {}", e));
+            println!("Unable to get wallet balance: {}", e);
         }
     }
 
@@ -621,7 +631,7 @@ async fn load_simulation(name: String) {
         Err(e) => {
             println!("Failed to finalize the simulation: {:?}", e);
             return;
-        }        
+        }
     }
 
     // Start the simulation
@@ -665,7 +675,7 @@ async fn load_simulation(name: String) {
     match blast.stop_network().await {
         Ok(_) => {},
         Err(e) => {
-            println!("Failed to stop the network: {:?}", e);       
+            println!("Failed to stop the network: {:?}", e);
         }
     }
 

@@ -19,7 +19,6 @@ dev-fast-gossip
 dev-bitcoind-poll=5
 experimental-dual-fund
 experimental-splicing
-experimental-offers
 funder-policy=match
 funder-policy-mod=100
 funder-min-their-funding=10000
@@ -33,4 +32,4 @@ EOF
 
 mkdir -p "$CLND_SOCK"
 test -f "$LIGHTNING_DIR/lightningd-regtest.pid" || \
-    "$CLND" "--network=regtest" "--alias=$ALIAS" "--lightning-dir=$LIGHTNING_DIR" "--bitcoin-datadir=$BITCOIN_DIR" "--database-upgrade=true" "--grpc-port=$socketrpc" "--rpc-file="$CLND_SOCK"/"$socketrpc""&
+    "$CLND" "--network=regtest" "--alias=$ALIAS" "--lightning-dir=$LIGHTNING_DIR" "--bitcoin-datadir=$BITCOIN_DIR" "--database-upgrade=true" "--grpc-port=$socketrpc" "--ignore-fee-limits=true" "--rpc-file="$CLND_SOCK"/"$socketrpc""&

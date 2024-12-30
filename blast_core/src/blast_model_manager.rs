@@ -49,14 +49,16 @@ struct BlastModel {
 /// The BlastModelManager struct is the public interface that allows models to be controlled
 #[derive(Clone)]
 pub struct BlastModelManager {
+    model_dir: String,
     models: HashMap<String, BlastModel>
 }
 
 impl BlastModelManager {
     /// Create a new BlastModelManager by searching the models directory and parsing all model.json files that are found
-    pub fn new() -> Self {
+    pub fn new(model_dir: String) -> Self {
         let blast_model_manager = BlastModelManager {
-            models: parse_models(),
+            model_dir: model_dir.clone(),
+            models: parse_models(model_dir),
         };
 
         blast_model_manager
@@ -115,18 +117,7 @@ impl BlastModelManager {
             }
         };
 
-        // Get the current working directory
-        let mut current_dir = match env::current_dir() {
-            Ok(d) => d,
-            Err(e) => {
-                return Err(format!("Failed to get the current directory: {:?}", e));
-            }
-        };
-    
-        // Get the full path to the model executable
-        current_dir.push("../blast_models/".to_owned()+&model.config.name+"/"+&model.config.start);
-        let model_exe = current_dir.to_string_lossy().into_owned();
-
+        let model_exe = self.model_dir.to_owned()+"/"+&model.config.name+"/"+&model.config.start;
         let home = env::var("HOME").expect("HOME environment variable not set");
         let folder_path = PathBuf::from(home).join(BLAST_MODEL_LOG_DIR);
 
@@ -180,7 +171,7 @@ impl BlastModelManager {
     /// Stop a model -- The model process should stop all of its nodes and exit
     pub async fn stop_model(&mut self, model: String) -> Result<(), String> {
         // Get the RPC client for this model
-        let client = self.get_model_client(model)?;
+        let client = self.get_model_client(model.clone())?;
 
         // Create a stop request
         let request = tonic::Request::new(BlastStopModelRequest {
@@ -190,7 +181,7 @@ impl BlastModelManager {
         let response = match client.stop_model(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC stop_model failed: {:?}", e));
+                return Err(format!("RPC stop_model for {} failed: {:?}", model, e));
             }
         };
 
@@ -211,7 +202,7 @@ impl BlastModelManager {
         let request = tonic::Request::new(BlastLoadRequest {
             sim: sim_name
         });
-    
+
         // Execute the load RPC
         let response = match client.load(request).await {
             Ok(r) => r,
@@ -225,7 +216,7 @@ impl BlastModelManager {
             Ok(())
         } else {
             Err(String::from("Model did not load successfully"))
-        }       
+        }
     }
 
     /// Tell a model to save its current state
@@ -237,7 +228,7 @@ impl BlastModelManager {
         let request = tonic::Request::new(BlastSaveRequest {
             sim: sim_name
         });
-    
+
         // Execute the save RPC
         let response = match client.save(request).await {
             Ok(r) => r,
@@ -251,7 +242,7 @@ impl BlastModelManager {
             Ok(())
         } else {
             Err(String::from("Model did not save successfully"))
-        }        
+        }
     }
 
     /// Get a list of the currently available models
@@ -261,24 +252,24 @@ impl BlastModelManager {
             Err(String::from("No models available"))
         } else {
             Ok(keys)
-        }       
+        }
     }
 
     /// Start a given number of nodes for the given model name
     pub async fn start_nodes(&mut self, model: String, num_nodes: i32) -> Result<String, String> {
         // Get the RPC client for this model
-        let client = self.get_model_client(model)?;
+        let client = self.get_model_client(model.clone())?;
 
         // Create a start request
         let request = tonic::Request::new(BlastStartRequest {
             num_nodes: num_nodes,
         });
-    
+
         // Execute the start RPC
         let response = match client.start_nodes(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC start nodes failed: {:?}", e));
+                return Err(format!("RPC start nodes for model {} failed: {:?}", model.clone(), e));
             }
         };
 
@@ -289,7 +280,7 @@ impl BlastModelManager {
             let response = match client.get_sim_ln(request).await {
                 Ok(r) => r,
                 Err(e) => {
-                    return Err(format!("RPC get_sim_ln failed: {:?}", e));
+                    return Err(format!("RPC get_sim_ln for model {} failed: {:?}", model, e));
                 }
             };
             match std::str::from_utf8(&response.get_ref().simln_data) {
@@ -311,14 +302,14 @@ impl BlastModelManager {
 
         // Create a pub key request
         let request = tonic::Request::new(BlastPubKeyRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the pub key RPC
         let response = match client.get_pub_key(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC get_pub_key failed: {:?}", e));
+                return Err(format!("RPC get_pub_key for {} failed: {:?}", node_id, e));
             }
         };
 
@@ -335,14 +326,14 @@ impl BlastModelManager {
 
         // Create a list peers request
         let request = tonic::Request::new(BlastPeersRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the list peers RPC
         let response = match client.list_peers(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC list_peers failed: {:?}", e));
+                return Err(format!("RPC list_peers for {} failed: {:?}", node_id, e));
             }
         };
 
@@ -359,17 +350,17 @@ impl BlastModelManager {
 
         // Create a wallet balance request
         let request = tonic::Request::new(BlastWalletBalanceRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the wallet balance RPC
         let response = match client.wallet_balance(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC wallet_balance failed: {:?}", e));
+                return Err(format!("RPC wallet_balance for {} failed: {:?}", node_id, e));
             }
         };
-        
+
         Ok(response.get_ref().balance.clone())
     }
 
@@ -383,17 +374,17 @@ impl BlastModelManager {
 
         // Create a channel balance request
         let request = tonic::Request::new(BlastChannelBalanceRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the channel balance RPC
         let response = match client.channel_balance(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC channel_balance failed: {:?}", e));
+                return Err(format!("RPC channel_balance for {} failed: {:?}", node_id, e));
             }
         };
-        
+
         Ok(response.get_ref().balance.clone())
     }
 
@@ -407,17 +398,17 @@ impl BlastModelManager {
 
         // Create a list channels request
         let request = tonic::Request::new(BlastListChannelsRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the list channels RPC
         let response = match client.list_channels(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC list_channels failed: {:?}", e));
+                return Err(format!("RPC list_channels for {} failed: {:?}", node_id, e));
             }
         };
-        
+
         Ok(response.get_ref().channels.clone())
     }
 
@@ -449,6 +440,13 @@ impl BlastModelManager {
             }
         }
 
+        // Sort the Vec of Strings by the first character interpreted as an integer
+        chans.sort_by(|a, b| {
+            let first_char_a = String::from(a.split(":").next().unwrap()).parse().unwrap_or(0);
+            let first_char_b = String::from(b.split(":").next().unwrap()).parse().unwrap_or(0);
+            first_char_a.cmp(&first_char_b)
+        });
+
         chans
     }
 
@@ -465,7 +463,7 @@ impl BlastModelManager {
 
         // Create an open channel request
         let request = tonic::Request::new(BlastOpenChannelRequest {
-            node: source_id,
+            node: source_id.clone(),
             peer_pub_key: pub_key,
             peer_address: address,
             amount: amount,
@@ -477,10 +475,10 @@ impl BlastModelManager {
         let response = match client.open_channel(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC open_channel failed: {:?}", e));
+                return Err(format!("RPC open_channel for {} -> {} failed: {:?}", source_id, dest_id, e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -489,7 +487,7 @@ impl BlastModelManager {
         }
     }
 
-    /// Close a channel with chan_id from a node with source_id 
+    /// Close a channel with chan_id from a node with source_id
     pub async fn close_channel(&mut self, source_id: String, chan_id: i64) -> Result<(), String> {
         // Get the model name from the node_id (example node_id: model_name-0000)
         let model_name: String = get_model_from_node(source_id.clone());
@@ -499,7 +497,7 @@ impl BlastModelManager {
 
         // Create a close channel request
         let request = tonic::Request::new(BlastCloseChannelRequest {
-            node: source_id,
+            node: source_id.clone(),
             channel_id: chan_id
         });
 
@@ -507,10 +505,10 @@ impl BlastModelManager {
         let response = match client.close_channel(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC close_channel failed: {:?}", e));
+                return Err(format!("RPC close_channel for {} failed: {:?}", source_id, e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -532,7 +530,7 @@ impl BlastModelManager {
 
         // Create a connect request
         let request = tonic::Request::new(BlastConnectRequest {
-            node: node1_id,
+            node: node1_id.clone(),
             peer_pub_key: pub_key,
             peer_addr: addr
         });
@@ -541,10 +539,10 @@ impl BlastModelManager {
         let response = match client.connect_peer(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC connect_peer failed: {:?}", e));
+                return Err(format!("RPC connect_peer for {} failed: {:?}", node1_id, e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -565,7 +563,7 @@ impl BlastModelManager {
 
         // Create a disconnect request
         let request = tonic::Request::new(BlastDisconnectRequest {
-            node: node1_id,
+            node: node1_id.clone(),
             peer_pub_key: pub_key
         });
 
@@ -573,10 +571,10 @@ impl BlastModelManager {
         let response = match client.disconnect_peer(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC disconnect_peer failed: {:?}", e));
+                return Err(format!("RPC disconnect_peer for {} failed: {:?}", node1_id, e));
             }
         };
-        
+
         // Determine if the RPC was successful
         if response.get_ref().success {
             Ok(())
@@ -595,17 +593,17 @@ impl BlastModelManager {
 
         // Create a btc address request
         let request = tonic::Request::new(BlastBtcAddressRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the btc address RPC
         let response = match client.get_btc_address(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC get_btc_address failed: {:?}", e));
+                return Err(format!("RPC get_btc_address for {} failed: {:?}", node_id, e));
             }
         };
-        
+
         Ok(response.get_ref().address.clone())
     }
 
@@ -619,17 +617,17 @@ impl BlastModelManager {
 
         // Create a listen address request
         let request = tonic::Request::new(BlastListenAddressRequest {
-            node: node_id,
+            node: node_id.clone(),
         });
 
         // Execute the listen address RPC
         let response = match client.get_listen_address(request).await {
             Ok(r) => r,
             Err(e) => {
-                return Err(format!("RPC get_listen_address failed: {:?}", e));
+                return Err(format!("RPC get_listen_address for {} failed: {:?}", node_id, e));
             }
         };
-        
+
         Ok(response.get_ref().address.clone())
     }
 
@@ -655,25 +653,18 @@ impl BlastModelManager {
 fn get_model_from_node(node_id: String) -> String {
     // Split the input string on the '-' character
     let parts: Vec<&str> = node_id.split('-').collect();
-    
+
     // Return the first part, or an empty string if the input was empty
     parts.get(0).unwrap_or(&"").to_string()
 }
 
 /// Check for model.json files and create BlastModel objects for all known models
-fn parse_models() -> HashMap<String, BlastModel> {
+fn parse_models(dir: String) -> HashMap<String, BlastModel> {
     // Create a new map of all the models that are found and then get the models directory.
     let mut model_map = HashMap::new();
-    let mut current_dir = match env::current_dir() {
-        Ok(d) => d,
-        Err(_) => {
-            return model_map;
-        }
-    };
-    current_dir.push("../blast_models/");
 
     // Search for model.json files in the models directory
-    check_for_model(&current_dir.as_path(), 0, &mut model_map);
+    check_for_model(&Path::new(&dir), 0, &mut model_map);
 
     model_map
 }
