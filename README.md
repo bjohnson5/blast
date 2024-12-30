@@ -74,6 +74,8 @@ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
 export PATH=$PATH:$HOME/go/bin
 ```
 
+> You might want to add the two `export` commands to your `.bashrc` file so that new sessions with be able to see go
+
 ### Install blast
 ```bash
 git clone https://github.com/bjohnson5/blast.git

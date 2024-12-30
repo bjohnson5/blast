@@ -1,5 +1,6 @@
 #!/bin/bash
 
+mkdir -p ~/.bitcoin
 echo "server=1" > ~/.bitcoin/bitcoin.conf
 echo "regtest=1" >> ~/.bitcoin/bitcoin.conf
 echo "rpcuser=user" >> ~/.bitcoin/bitcoin.conf
