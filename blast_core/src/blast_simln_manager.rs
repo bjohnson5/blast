@@ -19,6 +19,7 @@ use simln_lib::cln::*;
 use anyhow::{anyhow, Error};
 use bitcoin::secp256k1::PublicKey;
 use tokio::sync::Mutex;
+use tokio_util::task::TaskTracker;
 
 /// The expected payment amount for the sim-ln simulation
 pub const EXPECTED_PAYMENT_AMOUNT: u64 = 3_800_000;
@@ -135,6 +136,7 @@ impl BlastSimLnManager {
                     Arc::new(Mutex::new(LndNode::new(c).await?))
                 },
                 NodeConnection::CLN(c) => Arc::new(Mutex::new(ClnNode::new(c).await?)),
+                NodeConnection::ECLAIR(_) => todo!(),
             };
 
             let node_info = node.lock().await.get_info().clone();
@@ -210,6 +212,7 @@ impl BlastSimLnManager {
         let home = env::var("HOME").expect("HOME environment variable not set");
         let folder_path = PathBuf::from(home).join(RESULTS_DIR);
 
+        let tasks = TaskTracker::new();
         let sim = Simulation::new(
             SimulationCfg::new(
                 Some(crate::TOTAL_FRAMES as u32),
@@ -223,6 +226,7 @@ impl BlastSimLnManager {
             ),
             clients,
             validated_activities,
+            tasks
         );
         self.sim = Some(sim);
         Ok(())
@@ -279,6 +283,7 @@ impl BlastSimLnManager {
             let id = match n {
                 NodeConnection::LND(c) => c.id.to_string(),
                 NodeConnection::CLN(c) => c.id.to_string(),
+                NodeConnection::ECLAIR(c) => c.id.to_string(),
             };
             ids.push(id);
         }
