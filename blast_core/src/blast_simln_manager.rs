@@ -12,7 +12,6 @@ use serde::{Serialize, Deserialize};
 use simln_lib::ActivityDefinition;
 use simln_lib::Simulation;
 use simln_lib::LightningNode;
-use simln_lib::SimParams;
 use simln_lib::*;
 use simln_lib::lnd::*;
 use simln_lib::cln::*;
@@ -29,6 +28,44 @@ pub const ACTIVITY_MULTIPLIER: f64 = 2.0;
 
 /// The directory to write the sim-ln results to
 pub const RESULTS_DIR: &str = ".blast/blast_results";
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct SimParams {
+    pub nodes: Vec<NodeConnection>,
+    #[serde(default)]
+    pub activity: Vec<ActivityParser>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+enum NodeConnection {
+    Lnd(lnd::LndConnection),
+    Cln(cln::ClnConnection),
+    Eclair(eclair::EclairConnection),
+}
+
+/// Data structure used to parse information from the simulation file. It allows source and destination to be
+/// [NodeId], which enables the use of public keys and aliases in the simulation description.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ActivityParser {
+    /// The source of the payment.
+    #[serde(with = "serializers::serde_node_id")]
+    pub source: NodeId,
+    /// The destination of the payment.
+    #[serde(with = "serializers::serde_node_id")]
+    pub destination: NodeId,
+    /// The time in the simulation to start the payment.
+    pub start_secs: Option<u16>,
+    /// The number of payments to send over the course of the simulation.
+    #[serde(default)]
+    pub count: Option<u64>,
+    /// The interval of the event, as in every how many seconds the payment is performed.
+    #[serde(with = "serializers::serde_value_or_range")]
+    pub interval_secs: Interval,
+    /// The amount of m_sat to used in this payment.
+    #[serde(with = "serializers::serde_value_or_range")]
+    pub amount_msat: Amount,
+}
 
 /// The BlastSimLnManager holds the main sim-ln Simulation object and the current node and activity data that sim-ln uses
 #[derive(Clone)]
@@ -129,14 +166,14 @@ impl BlastSimLnManager {
         let mut alias_node_map = HashMap::new();
         for connection in nodes {
             let node: Arc<Mutex<dyn LightningNode>> = match connection {
-                NodeConnection::LND(c) => {
+                NodeConnection::Lnd(c) => {
                     if c.address.is_empty() {
                         continue;
                     }
                     Arc::new(Mutex::new(LndNode::new(c).await?))
                 },
-                NodeConnection::CLN(c) => Arc::new(Mutex::new(ClnNode::new(c).await?)),
-                NodeConnection::ECLAIR(_) => todo!(),
+                NodeConnection::Cln(c) => Arc::new(Mutex::new(ClnNode::new(c).await?)),
+                NodeConnection::Eclair(_) => todo!(),
             };
 
             let node_info = node.lock().await.get_info().clone();
@@ -281,9 +318,9 @@ impl BlastSimLnManager {
         let mut ids = Vec::<String>::new();
         for n in &self.data.nodes {
             let id = match n {
-                NodeConnection::LND(c) => c.id.to_string(),
-                NodeConnection::CLN(c) => c.id.to_string(),
-                NodeConnection::ECLAIR(c) => c.id.to_string(),
+                NodeConnection::Lnd(c) => c.id.to_string(),
+                NodeConnection::Cln(c) => c.id.to_string(),
+                NodeConnection::Eclair(c) => c.id.to_string(),
             };
             ids.push(id);
         }
